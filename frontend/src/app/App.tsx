@@ -739,23 +739,75 @@ function OrderModal({ deal, onClose, onConfirm }: {
 // ─────────────────────────────────────────────────────────────────────────────
 // 모집 작성 (Post)
 // ─────────────────────────────────────────────────────────────────────────────
-function PostScreen({ onBack }: { onBack: () => void }) {
-  const [city,       setCity]      = useState("");
-  const [branch,     setBranch]    = useState("");
-  const [discRate,   setDiscRate]  = useState("");
-  const [qty,        setQty]       = useState(10);
-  const [timeFrom,   setTimeFrom]  = useState("");
-  const [timeTo,     setTimeTo]    = useState("");
-  const [pickup,     setPickup]    = useState("");
-  const [kakao,      setKakao]     = useState("");
-  const [extraNote,  setExtraNote] = useState("");
+const CITY_SHORT_TO_FULL: Record<string, string> = {
+  "서울": "서울특별시", "부산": "부산광역시", "인천": "인천광역시", "대구": "대구광역시",
+  "대전": "대전광역시", "광주": "광주광역시", "경기": "경기도", "경남": "경상남도", "경북": "경상북도",
+};
+const CITY_FULL_TO_SHORT: Record<string, string> =
+  Object.fromEntries(Object.entries(CITY_SHORT_TO_FULL).map(([short, full]) => [full, short]));
+
+const BRANCH_OPTIONS: Record<string, string[]> = {
+  "서울특별시": ["메가MGC커피 강남점", "메가MGC커피 홍대입구역점", "메가MGC커피 신촌점", "메가MGC커피 건대입구점"],
+  "부산광역시": ["메가MGC커피 부산대학로점", "메가MGC커피 해운대점", "메가MGC커피 서면점"],
+  "경기도":     ["메가MGC커피 수원역점", "메가MGC커피 성남분당점", "메가MGC커피 일산점"],
+};
+const DEFAULT_BRANCH_OPTIONS = ["메가MGC커피 시내점", "메가MGC커피 역세권점"];
+function branchOptionsFor(city: string): string[] {
+  if (!city) return [];
+  return BRANCH_OPTIONS[city] ?? DEFAULT_BRANCH_OPTIONS;
+}
+
+function PostScreen({ onBack, initialDeal, onSubmit }: {
+  onBack: () => void;
+  initialDeal?: Deal;
+  onSubmit?: (deal: Deal) => void;
+}) {
+  const mode = initialDeal ? "edit" : "create";
+
+  const initialCity   = initialDeal ? (CITY_SHORT_TO_FULL[initialDeal.store.city] ?? "") : "";
+  const initialBranch = initialDeal ? `${initialDeal.store.name} ${initialDeal.store.branch}` : "";
+
+  const [city,       setCity]      = useState(initialCity);
+  const [branch,     setBranch]    = useState(
+    initialDeal && branchOptionsFor(initialCity).includes(initialBranch) ? initialBranch : ""
+  );
+  const [discRate,   setDiscRate]  = useState(initialDeal ? String(bestDiscount(initialDeal.drinks)) : "");
+  const [qty,        setQty]       = useState(initialDeal ? initialDeal.totalTarget : 10);
+  const [timeFrom,   setTimeFrom]  = useState(initialDeal?.timeFrom ?? "");
+  const [timeTo,     setTimeTo]    = useState(initialDeal?.timeTo ?? "");
+  const [pickup,     setPickup]    = useState(initialDeal ? "매장 앞 직접 수령" : "");
+  const [kakao,      setKakao]     = useState(initialDeal?.kakaoLink ?? "");
+  const [extraNote,  setExtraNote] = useState(initialDeal?.note ?? "");
   const [done,       setDone]      = useState(false);
 
   const discRateNum = Number(discRate);
   const discRateValid = discRate && discRateNum > 0 && discRateNum < 100;
   const canSubmit = city && branch && discRateValid && timeFrom && timeTo && pickup && kakao;
 
-  if (done) return (
+  function handleSubmit() {
+    if (!canSubmit) return;
+    if (mode === "edit" && initialDeal && onSubmit) {
+      const rate = discRateNum / 100;
+      onSubmit({
+        ...initialDeal,
+        store: {
+          ...initialDeal.store,
+          branch: branch.replace(`${initialDeal.store.name} `, ""),
+          city: CITY_FULL_TO_SHORT[city] ?? initialDeal.store.city,
+        },
+        drinks: initialDeal.drinks.map(d => ({ ...d, discountPrice: Math.round(d.originalPrice * (1 - rate)) })),
+        timeFrom, timeTo,
+        totalTarget: qty,
+        kakaoLink: kakao,
+        note: extraNote,
+      });
+      onBack();
+      return;
+    }
+    setDone(true);
+  }
+
+  if (mode === "create" && done) return (
     <div className="flex flex-col h-full items-center justify-center gap-6 px-8 text-center bg-white">
       <div className="w-20 h-20 bg-purple-100 rounded-full flex items-center justify-center">
         <Ticket className="w-10 h-10 text-primary" />
@@ -782,7 +834,7 @@ function PostScreen({ onBack }: { onBack: () => void }) {
           className="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center">
           <ArrowLeft className="w-4 h-4 text-gray-700" />
         </button>
-        <span className="flex-1 text-center font-black text-sm text-gray-900 -ml-8 pointer-events-none">모집 작성</span>
+        <span className="flex-1 text-center font-black text-sm text-gray-900 -ml-8 pointer-events-none">{mode === "edit" ? "모집 수정" : "모집 작성"}</span>
       </div>
 
       <div className="flex-1 overflow-y-auto">
@@ -817,26 +869,7 @@ function PostScreen({ onBack }: { onBack: () => void }) {
                 value={branch} onChange={e => setBranch(e.target.value)}
                 disabled={!city}>
                 <option value="">{city ? "메가MGC커피 지점을 선택해주세요" : "지역을 먼저 선택해주세요"}</option>
-                {city === "서울특별시" && <>
-                  <option>메가MGC커피 강남점</option>
-                  <option>메가MGC커피 홍대입구역점</option>
-                  <option>메가MGC커피 신촌점</option>
-                  <option>메가MGC커피 건대입구점</option>
-                </>}
-                {city === "부산광역시" && <>
-                  <option>메가MGC커피 부산대학로점</option>
-                  <option>메가MGC커피 해운대점</option>
-                  <option>메가MGC커피 서면점</option>
-                </>}
-                {city === "경기도" && <>
-                  <option>메가MGC커피 수원역점</option>
-                  <option>메가MGC커피 성남분당점</option>
-                  <option>메가MGC커피 일산점</option>
-                </>}
-                {city && !["서울특별시","부산광역시","경기도"].includes(city) && <>
-                  <option>메가MGC커피 시내점</option>
-                  <option>메가MGC커피 역세권점</option>
-                </>}
+                {branchOptionsFor(city).map(b => <option key={b}>{b}</option>)}
               </select>
               <ChevronDown className="absolute right-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
             </div>
@@ -941,10 +974,10 @@ function PostScreen({ onBack }: { onBack: () => void }) {
       {/* submit */}
       <div className="px-4 py-3 bg-white border-t border-gray-100 flex-shrink-0">
         <button
-          onClick={() => { if (canSubmit) setDone(true); }}
+          onClick={handleSubmit}
           disabled={!canSubmit}
           className="w-full bg-primary text-white rounded-2xl py-4 font-black text-base disabled:opacity-40 transition-opacity">
-          등록하기
+          {mode === "edit" ? "수정하기" : "등록하기"}
         </button>
       </div>
     </div>
@@ -1256,6 +1289,7 @@ const MY_MOCK_DEALS: Deal[] = [
 function MyDealsScreen({ onBack }: { onBack: () => void }) {
   const [filter, setFilter]   = useState<MyDealFilter>("전체");
   const [myDeals, setMyDeals] = useState<Deal[]>(MY_MOCK_DEALS);
+  const [editingDeal, setEditingDeal] = useState<Deal | null>(null);
 
   const visible = myDeals.filter(d =>
     filter === "전체" ? true :
@@ -1269,6 +1303,14 @@ function MyDealsScreen({ onBack }: { onBack: () => void }) {
   function handleDelete(id: number) {
     setMyDeals(prev => prev.filter(d => d.id !== id));
   }
+
+  if (editingDeal) return (
+    <PostScreen
+      initialDeal={editingDeal}
+      onBack={() => setEditingDeal(null)}
+      onSubmit={updated => setMyDeals(prev => prev.map(d => d.id === updated.id ? updated : d))}
+    />
+  );
 
   return (
     <div className="flex flex-col h-full bg-white">
@@ -1303,17 +1345,19 @@ function MyDealsScreen({ onBack }: { onBack: () => void }) {
         ) : visible.map(d => (
           <MyDealCard key={d.id} deal={d}
             onClose={() => handleClose(d.id)}
-            onDelete={() => handleDelete(d.id)} />
+            onDelete={() => handleDelete(d.id)}
+            onEdit={() => setEditingDeal(d)} />
         ))}
       </div>
     </div>
   );
 }
 
-function MyDealCard({ deal, onClose, onDelete }: {
+function MyDealCard({ deal, onClose, onDelete, onEdit }: {
   deal: Deal;
   onClose: () => void;
   onDelete: () => void;
+  onEdit: () => void;
 }) {
   const disc      = bestDiscount(deal.drinks);
   const remaining = deal.totalTarget - deal.currentOrders;
@@ -1358,7 +1402,8 @@ function MyDealCard({ deal, onClose, onDelete }: {
           </button>
         ) : (
           <>
-            <button className="flex-1 text-xs font-bold text-gray-600 border border-gray-200 py-2.5 rounded-xl">
+            <button onClick={onEdit}
+              className="flex-1 text-xs font-bold text-gray-600 border border-gray-200 py-2.5 rounded-xl">
               수정
             </button>
             <button onClick={onClose}
