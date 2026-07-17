@@ -1,0 +1,214 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum UserRole {
+  USER
+  ADMIN
+}
+
+enum UserStatus {
+  ACTIVE
+  SUSPENDED
+}
+
+enum PostStatus {
+  OPEN
+  CLOSED
+}
+
+enum ReportReason {
+  FRAUD
+  NO_SHOW
+  ABUSE
+  OTHER
+}
+
+enum ReportStatus {
+  PENDING
+  RESOLVED
+  REJECTED
+}
+
+model User {
+  id               String           @id @default(cuid())
+  kakaoUserId      String           @unique @db.VarChar(32)
+  nickname         String           @unique @db.VarChar(20)
+  profileImage     String?
+  role             UserRole         @default(USER)
+  status           UserStatus       @default(ACTIVE)
+  rating           Float            @default(0)
+  reviewCount      Int              @default(0)
+  lastLoginAt      DateTime         @default(now())
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
+  suspendedAt      DateTime?
+  suspensionReason String?
+  deletedAt        DateTime?
+  sessions         AuthSession[]
+  posts            Post[]           @relation("PostWriter")
+  writtenReviews   Review[]         @relation("ReviewWriter")
+  receivedReviews  Review[]         @relation("ReviewSeller")
+  favorites        Favorite[]
+  reports          Report[]         @relation("ReportReporter")
+  handledReports   Report[]         @relation("ReportHandler")
+  adminActions     AdminActionLog[] @relation("AdminActions")
+
+  @@index([status])
+  @@index([createdAt])
+}
+
+model AuthSession {
+  id               String    @id @default(cuid())
+  userId           String
+  refreshTokenHash String    @unique @db.Char(64)
+  expiresAt        DateTime
+  revokedAt        DateTime?
+  lastUsedAt       DateTime?
+  userAgent        String?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+  user             User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expiresAt])
+}
+
+model Store {
+  id        String   @id @default(cuid())
+  name      String
+  region    String
+  address   String
+  latitude  Decimal? @db.Decimal(9, 6)
+  longitude Decimal? @db.Decimal(9, 6)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  posts     Post[]
+
+  @@unique([name, address])
+  @@index([name])
+  @@index([region])
+}
+
+model Event {
+  id          String   @id @default(cuid())
+  title       String
+  description String?
+  startDate   DateTime
+  endDate     DateTime
+  bannerImage String?
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  posts       Post[]
+
+  @@index([isActive, startDate, endDate])
+}
+
+model Post {
+  id           String     @id @default(cuid())
+  writerId     String
+  storeId      String
+  eventId      String?
+  discount     Int
+  totalCount   Int
+  remainCount  Int
+  meetingTime  DateTime
+  meetingPlace String
+  openChatUrl  String
+  description  String?
+  imageUrl     String?
+  status       PostStatus @default(OPEN)
+  closedAt     DateTime?
+  deletedAt    DateTime?
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+  writer       User       @relation("PostWriter", fields: [writerId], references: [id], onDelete: Restrict)
+  store        Store      @relation(fields: [storeId], references: [id], onDelete: Restrict)
+  event        Event?     @relation(fields: [eventId], references: [id], onDelete: SetNull)
+  reviews      Review[]
+  favorites    Favorite[]
+  reports      Report[]
+
+  @@index([status])
+  @@index([createdAt])
+  @@index([discount])
+  @@index([remainCount])
+  @@index([meetingTime])
+  @@index([writerId])
+  @@index([storeId])
+  @@index([eventId])
+  @@index([deletedAt, status, createdAt])
+}
+
+model Review {
+  id        String   @id @default(cuid())
+  writerId  String
+  sellerId  String
+  postId    String
+  rating    Int
+  content   String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  writer    User     @relation("ReviewWriter", fields: [writerId], references: [id], onDelete: Restrict)
+  seller    User     @relation("ReviewSeller", fields: [sellerId], references: [id], onDelete: Restrict)
+  post      Post     @relation(fields: [postId], references: [id], onDelete: Restrict)
+
+  @@unique([writerId, postId])
+  @@index([sellerId, createdAt])
+  @@index([postId])
+}
+
+model Favorite {
+  id        String   @id @default(cuid())
+  userId    String
+  postId    String
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  post      Post     @relation(fields: [postId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, postId])
+  @@index([postId])
+}
+
+model Report {
+  id           String       @id @default(cuid())
+  reporterId   String
+  targetPostId String
+  reason       ReportReason
+  detail       String?
+  status       ReportStatus @default(PENDING)
+  handledById  String?
+  adminNote    String?
+  handledAt    DateTime?
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+  reporter     User         @relation("ReportReporter", fields: [reporterId], references: [id], onDelete: Restrict)
+  targetPost   Post         @relation(fields: [targetPostId], references: [id], onDelete: Restrict)
+  handledBy    User?        @relation("ReportHandler", fields: [handledById], references: [id], onDelete: SetNull)
+
+  @@unique([reporterId, targetPostId, reason])
+  @@index([status, createdAt])
+  @@index([targetPostId])
+  @@index([handledById])
+}
+
+model AdminActionLog {
+  id         String   @id @default(cuid())
+  adminId    String
+  action     String
+  targetType String
+  targetId   String
+  reason     String?
+  metadata   Json?
+  createdAt  DateTime @default(now())
+  admin      User     @relation("AdminActions", fields: [adminId], references: [id], onDelete: Restrict)
+
+  @@index([adminId, createdAt])
+  @@index([targetType, targetId])
+}
