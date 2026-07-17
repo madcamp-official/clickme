@@ -10,6 +10,10 @@ import mascots    from "@/imports/image.png";
 import nctWishChar from "@/imports/__.png";
 import nctWishLogo from "@/imports/image-1.png";
 import pixelScene  from "@/imports/image-2.png";
+import fanJaehee from "@/imports/jaehee.jpeg";
+import fanRiku   from "@/imports/riku.jpeg";
+import fanRyo    from "@/imports/ryo.jpeg";
+import fanYushi  from "@/imports/yushi.jpeg";
 import { ImageWithFallback } from "@/app/components/figma/ImageWithFallback";
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -50,7 +54,7 @@ interface Deal {
 const INITIAL_DEALS: Deal[] = [
   {
     id: 1,
-    fan: { name: "별이빛나는밤", avatar: "🌟", verified: true,  rating: 4.9, totalTickets: 3 },
+    fan: { name: "별이빛나는밤", avatar: fanJaehee, verified: true,  rating: 4.9, totalTickets: 3 },
     store: { name: "메가MGC커피", branch: "부산대학로점", district: "부산 금정구", city: "부산", address: "부산 금정구 부산대학로 63" },
     drinks: [
       { name: "아메리카노", originalPrice: 2500, discountPrice: 2000, emoji: "☕" },
@@ -58,14 +62,14 @@ const INITIAL_DEALS: Deal[] = [
     ],
     date: "2025.07.20", timeFrom: "14:00", timeTo: "18:00",
     totalTarget: 10, currentOrders: 7, status: "진행중",
-    image:     "https://images.unsplash.com/photo-1501854140801-50d01698950b?w=800&h=450&fit=crop&auto=format",
+    image:     fanJaehee,
     liked: false,
     kakaoLink: "https://open.kakao.com/o/example1",
     note: "부산대 정문 앞 메가MGC커피입니다. 메가오더로 직접 주문 후 매장 앞에서 전달해드려요!",
   },
   {
     id: 2,
-    fan: { name: "위시위시", avatar: "⭐", verified: true,  rating: 5.0, totalTickets: 7 },
+    fan: { name: "위시위시", avatar: fanRiku, verified: true,  rating: 5.0, totalTickets: 7 },
     store: { name: "메가MGC커피", branch: "홍대입구역점", district: "서울 마포구", city: "서울", address: "서울 마포구 양화로 176" },
     drinks: [
       { name: "아메리카노", originalPrice: 2500, discountPrice: 2100, emoji: "☕" },
@@ -73,14 +77,14 @@ const INITIAL_DEALS: Deal[] = [
     ],
     date: "2025.07.21", timeFrom: "12:00", timeTo: "17:00",
     totalTarget: 10, currentOrders: 9, status: "마감임박",
-    image:     "https://images.unsplash.com/photo-1490750967868-88df5691cc57?w=800&h=450&fit=crop&auto=format",
+    image:     fanRiku,
     liked: true,
     kakaoLink: "https://open.kakao.com/o/example2",
     note: "홍대입구역 2번 출구 바로 앞 매장이에요. 한 잔만 남았어요, 빠르게 연락주세요!",
   },
   {
     id: 3,
-    fan: { name: "NCT사랑해", avatar: "💜", verified: false, rating: 4.7, totalTickets: 1 },
+    fan: { name: "NCT사랑해", avatar: fanRyo, verified: false, rating: 4.7, totalTickets: 1 },
     store: { name: "메가MGC커피", branch: "신촌점",      district: "서울 서대문구", city: "서울", address: "서울 서대문구 신촌로 83" },
     drinks: [
       { name: "아메리카노", originalPrice: 2500, discountPrice: 2000, emoji: "☕" },
@@ -88,14 +92,14 @@ const INITIAL_DEALS: Deal[] = [
     ],
     date: "2025.07.22", timeFrom: "10:00", timeTo: "20:00",
     totalTarget: 10, currentOrders: 3, status: "진행중",
-    image:     "https://images.unsplash.com/photo-1465146344425-f00d5f5c8f07?w=800&h=450&fit=crop&auto=format",
+    image:     fanRyo,
     liked: false,
     kakaoLink: "https://open.kakao.com/o/example3",
     note: "신촌역 2번 출구에서 도보 3분 거리입니다. 음료 준비되면 카카오톡으로 연락드릴게요.",
   },
   {
     id: 4,
-    fan: { name: "경기팬연합", avatar: "🧡", verified: true,  rating: 4.8, totalTickets: 5 },
+    fan: { name: "경기팬연합", avatar: fanYushi, verified: true,  rating: 4.8, totalTickets: 5 },
     store: { name: "메가MGC커피", branch: "수원역점",    district: "경기 수원시", city: "경기", address: "경기 수원시 팔달구 덕영대로 924" },
     drinks: [
       { name: "아메리카노", originalPrice: 2500, discountPrice: 1900, emoji: "☕" },
@@ -103,7 +107,7 @@ const INITIAL_DEALS: Deal[] = [
     ],
     date: "2025.07.23", timeFrom: "13:00", timeTo: "19:00",
     totalTarget: 10, currentOrders: 1, status: "진행중",
-    image:     "https://images.unsplash.com/photo-1441974231531-c6227db76b6e?w=800&h=450&fit=crop&auto=format",
+    image:     fanYushi,
     liked: false,
     kakaoLink: "https://open.kakao.com/o/example4",
     note: "수원역 AK플라자 근처 메가MGC커피예요. 단체 주문 환영합니다!",
@@ -280,19 +284,20 @@ function ListScreen({ deals, onSelect, onLike }: {
 }) {
   const [filter, setFilter]   = useState<FilterType>("전체");
   const [sortOpen, setSortOpen] = useState(false);
-  const [sort, setSort]       = useState<"최신순" | "할인순" | "마감임박순">("최신순");
+  const [sort, setSort]       = useState<"오늘 마감" | "내 주변" | "할인 높은순" | "최신 등록순">("최신 등록순");
   const [regionFilter, setRegionFilter] = useState("전체");
   const [discFilter, setDiscFilter] = useState("전체");
   const [filterOpen, setFilterOpen] = useState(false);
-
+  const nearbyCity = "서울";
 
   const filtered = deals
-    .filter(d => filter === "전체" || (filter === "마감임박순" ? true : true))
+    .filter(d => filter === "전체" || filter === "오늘 마감" || d.status !== "마감")
     .filter(d => regionFilter === "전체" || d.store.city === regionFilter)
     .filter(d => discFilter === "전체" || bestDiscount(d.drinks) >= Number(discFilter))
     .sort((a, b) => {
-      if (sort === "할인순")    return bestDiscount(b.drinks) - bestDiscount(a.drinks);
-      if (sort === "마감임박순") return (b.totalTarget - b.currentOrders) - (a.totalTarget - a.currentOrders);
+      if (sort === "할인 높은순")  return bestDiscount(b.drinks) - bestDiscount(a.drinks);
+      if (sort === "오늘 마감")    return (a.totalTarget - a.currentOrders) - (b.totalTarget - b.currentOrders);
+      if (sort === "내 주변")      return (b.store.city === nearbyCity ? 1 : 0) - (a.store.city === nearbyCity ? 1 : 0);
       return b.id - a.id;
     });
 
@@ -352,7 +357,7 @@ function ListScreen({ deals, onSelect, onLike }: {
           </button>
           {sortOpen && (
             <div className="absolute top-8 right-4 bg-white border border-gray-100 rounded-xl shadow-lg z-20 overflow-hidden">
-              {(["최신순", "할인순", "마감임박순"] as const).map(s => (
+              {(["오늘 마감", "내 주변", "할인 높은순", "최신 등록순"] as const).map(s => (
                 <button key={s} onClick={() => { setSort(s); setSortOpen(false); }}
                   className={`block w-full text-left px-4 py-2.5 text-xs font-semibold ${
                     sort === s ? "text-primary" : "text-gray-600"
@@ -415,7 +420,7 @@ function ListCard({ deal, onTap, onLike }: { deal: Deal; onTap: () => void; onLi
           <p className="text-lg font-black text-red-500 leading-tight mt-0.5">{disc}% 할인</p>
           <p className="text-xs text-gray-400">총 {deal.totalTarget}잔 모집</p>
           <div className="flex items-center gap-1.5 mt-2 pt-2 border-t border-gray-50">
-            <span className="text-sm leading-none">{deal.fan.avatar}</span>
+            <img src={deal.fan.avatar} alt={deal.fan.name} className="w-4 h-4 rounded-full object-cover flex-shrink-0" />
             <span className="text-[11px] text-gray-400 truncate flex-1">{deal.fan.name}</span>
             {deal.fan.verified && <CheckCircle className="w-3 h-3 text-primary flex-shrink-0" />}
             <span className="text-[11px] font-black text-white bg-pink-500 px-2 py-0.5 rounded-full flex-shrink-0">
@@ -581,8 +586,8 @@ function DetailScreen({ deal, onBack, onOrder, onLike, onReport }: {
           {/* fan */}
           <div className="border-t border-gray-100 pt-4">
             <div className="flex items-center gap-3">
-              <div className="w-11 h-11 rounded-full bg-purple-100 flex items-center justify-center text-2xl flex-shrink-0">
-                {deal.fan.avatar}
+              <div className="w-11 h-11 rounded-full bg-purple-100 overflow-hidden flex-shrink-0">
+                <img src={deal.fan.avatar} alt={deal.fan.name} className="w-full h-full object-cover" />
               </div>
               <div className="flex-1">
                 <div className="flex items-center gap-1.5">
@@ -1035,13 +1040,40 @@ function HomeScreen({ deals, onSelect, onLike, onGuide, onEvent, onSearch, onLis
         </div>
       </section>
 
-      {/* search */}
+      {/* notice */}
       <section className="px-3 mt-3">
+        <button onClick={onGuide}
+          className="w-full bg-white border border-gray-100 rounded-2xl flex items-center gap-2 px-3.5 py-2.5 shadow-sm text-left">
+          <span className="w-6 h-6 rounded-full bg-purple-50 flex items-center justify-center flex-shrink-0">
+            <Megaphone className="w-3.5 h-3.5 text-primary" />
+          </span>
+          <span className="flex-1 text-xs font-semibold text-gray-600 truncate">8/5(월) 팬사인회 당첨자 발표 및 안내</span>
+          <ChevronRight className="w-3.5 h-3.5 text-gray-300 flex-shrink-0" />
+        </button>
+      </section>
+
+      {/* search + filters */}
+      <section className="px-3 mt-2.5">
         <button onClick={() => onSearch("")}
           className="w-full bg-white border border-gray-100 rounded-2xl flex items-center gap-2.5 px-4 py-3 shadow-sm text-left">
           <Search className="w-4 h-4 text-gray-300 flex-shrink-0" />
           <span className="flex-1 text-sm text-gray-300">지역, 매장, 할인율을 검색해보세요</span>
         </button>
+        <div className="flex items-center gap-1.5 mt-2 overflow-x-auto">
+          {[
+            { icon: MapPin, label: "지역" },
+            { icon: Store,  label: "매장" },
+            { icon: SlidersHorizontal, label: "할인율" },
+            { icon: Ticket, label: "남은 잔 수" },
+          ].map(({ icon: Icon, label }) => (
+            <button key={label} onClick={() => onSearch("")}
+              className="flex items-center gap-1 bg-white border border-gray-100 rounded-full px-3 py-1.5 shadow-sm flex-shrink-0">
+              <Icon className="w-3 h-3 text-gray-400" />
+              <span className="text-[11px] font-semibold text-gray-500">{label}</span>
+              <ChevronDown className="w-3 h-3 text-gray-300" />
+            </button>
+          ))}
+        </div>
       </section>
 
       {/* quick actions */}
@@ -1722,7 +1754,8 @@ function AccountSettingsScreen({ onBack }: { onBack: () => void }) {
 // ─────────────────────────────────────────────────────────────────────────────
 // 이벤트 Screen
 // ─────────────────────────────────────────────────────────────────────────────
-function EventScreen({ onBack }: { onBack: () => void }) {
+function EventScreen({ onBack, onJoin }: { onBack: () => void; onJoin: () => void }) {
+  const guideRef = useRef<HTMLDivElement>(null);
   return (
     <div className="flex flex-col h-full bg-[#F8F6FF]">
       {/* header */}
@@ -1798,7 +1831,7 @@ function EventScreen({ onBack }: { onBack: () => void }) {
         </div>
 
         {/* event guide */}
-        <div className="bg-white rounded-3xl border border-gray-100 shadow-sm px-5 py-5">
+        <div ref={guideRef} className="bg-white rounded-3xl border border-gray-100 shadow-sm px-5 py-5">
           <p className="text-sm font-black text-gray-900 mb-3">이벤트 안내</p>
           <p className="text-sm text-gray-500 leading-relaxed">
             미션 음료 3개 + 일반 메뉴 7개를 포함한 총 <span className="font-black text-primary">10개</span>의
@@ -1822,10 +1855,12 @@ function EventScreen({ onBack }: { onBack: () => void }) {
 
         {/* CTA buttons */}
         <div className="flex gap-2.5">
-          <button className="flex-1 border border-primary text-primary py-3.5 rounded-2xl font-black text-sm">
+          <button type="button" onClick={() => guideRef.current?.scrollIntoView({ behavior: "smooth" })}
+            className="flex-1 border border-primary text-primary py-3.5 rounded-2xl font-black text-sm">
             자세히 보기
           </button>
-          <button className="flex-1 bg-primary text-white py-3.5 rounded-2xl font-black text-sm shadow-md shadow-primary/25">
+          <button type="button" onClick={onJoin}
+            className="flex-1 bg-primary text-white py-3.5 rounded-2xl font-black text-sm shadow-md shadow-primary/25">
             이벤트 참여하기
           </button>
         </div>
@@ -1846,6 +1881,9 @@ function SearchScreen({ deals, initialQuery, onSelect, onLike, onBack }: {
 }) {
   const [query,  setQuery]  = useState(initialQuery);
   const [filter, setFilter] = useState<FilterType>("전체");
+  const [filterOpen, setFilterOpen] = useState(false);
+  const [regionFilter, setRegionFilter] = useState("전체");
+  const [discFilter, setDiscFilter] = useState("전체");
   const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => { inputRef.current?.focus(); }, []);
@@ -1860,7 +1898,9 @@ function SearchScreen({ deals, initialQuery, onSelect, onLike, onBack }: {
       filter === "전체" ? true :
       filter === "모집중" ? d.status !== "마감" :
       /* 오늘 마감 */ d.status === "마감임박";
-    return matchesQuery && matchesFilter;
+    const matchesRegion = regionFilter === "전체" || d.store.city === regionFilter;
+    const matchesDisc = discFilter === "전체" || bestDiscount(d.drinks) >= Number(discFilter);
+    return matchesQuery && matchesFilter && matchesRegion && matchesDisc;
   });
 
   return (
@@ -1887,8 +1927,9 @@ function SearchScreen({ deals, initialQuery, onSelect, onLike, onBack }: {
             </button>
           )}
         </div>
-        <button className="w-8 h-8 flex items-center justify-center rounded-full flex-shrink-0">
-          <SlidersHorizontal className="w-4 h-4 text-gray-400" />
+        <button type="button" onClick={() => setFilterOpen(o => !o)}
+          className={`w-8 h-8 flex items-center justify-center rounded-full flex-shrink-0 transition-colors ${filterOpen ? "bg-primary text-white" : "text-gray-400"}`}>
+          <SlidersHorizontal className="w-4 h-4" />
         </button>
       </div>
 
@@ -1903,6 +1944,34 @@ function SearchScreen({ deals, initialQuery, onSelect, onLike, onBack }: {
           </button>
         ))}
       </div>
+
+      {/* filter panel */}
+      {filterOpen && (
+        <div className="px-4 pb-3 pt-1 space-y-3 bg-gray-50/60 border-b border-gray-100 flex-shrink-0">
+          <div>
+            <p className="text-[11px] font-bold text-gray-400 mb-2">지역</p>
+            <div className="flex flex-wrap gap-1.5">
+              {["전체", "서울", "부산", "인천", "대구", "대전", "광주", "경기"].map(r => (
+                <button key={r} type="button" onClick={() => setRegionFilter(r)}
+                  className={`text-xs font-semibold px-3 py-1.5 rounded-full border transition-colors ${regionFilter === r ? "bg-primary text-white border-primary" : "bg-white text-gray-500 border-gray-200"}`}>
+                  {r}
+                </button>
+              ))}
+            </div>
+          </div>
+          <div>
+            <p className="text-[11px] font-bold text-gray-400 mb-2">할인율</p>
+            <div className="flex flex-wrap gap-1.5">
+              {[{ label: "전체", val: "전체" }, { label: "10%+", val: "10" }, { label: "20%+", val: "20" }, { label: "30%+", val: "30" }, { label: "40%+", val: "40" }, { label: "50%+", val: "50" }].map(({ label, val }) => (
+                <button key={val} type="button" onClick={() => setDiscFilter(val)}
+                  className={`text-xs font-semibold px-3 py-1.5 rounded-full border transition-colors ${discFilter === val ? "bg-primary text-white border-primary" : "bg-white text-gray-500 border-gray-200"}`}>
+                  {label}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* results */}
       <div className="flex-1 overflow-y-auto bg-[#F8F6FF] px-3 py-2 space-y-3">
@@ -2392,7 +2461,7 @@ export default function App() {
     <Shell><GuideScreen onBack={() => setTopScreen(null)} /></Shell>
   );
   if (topScreen === "event") return (
-    <Shell><EventScreen onBack={() => setTopScreen(null)} /></Shell>
+    <Shell><EventScreen onBack={() => setTopScreen(null)} onJoin={() => { setTopScreen(null); setTab("list"); }} /></Shell>
   );
   if (topScreen === "search") return (
     <Shell>
