@@ -1,0 +1,31 @@
+name: backend-check
+on:
+  pull_request:
+    paths: ["backend/**"]
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+      - run: npm ci
+      - run: npm run check
+        env:
+          NODE_ENV: test
+          DATABASE_URL: postgresql://test:test@127.0.0.1:5432/test
+          DIRECT_URL: postgresql://test:test@127.0.0.1:5432/test
+          CORS_ORIGINS: http://localhost:3000
+          KAKAO_REST_API_KEY: test-key
+          KAKAO_CLIENT_SECRET: test-secret
+          KAKAO_REDIRECT_URI: http://localhost:4000/api/v1/auth/kakao/callback
+          FRONTEND_AUTH_SUCCESS_URL: http://localhost:3000/auth/callback/success
+          FRONTEND_AUTH_FAILURE_URL: http://localhost:3000/auth/callback/failure
+          JWT_ACCESS_SECRET: test-only-jwt-secret-that-is-at-least-sixty-four-characters-long-1234567890
+          COOKIE_SECRET: test-only-cookie-secret-that-is-long-enough-1234567890

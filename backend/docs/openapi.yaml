@@ -1,0 +1,590 @@
+openapi: 3.1.0
+info:
+  title: WISH MATCH API
+  version: 1.0.0
+  description: |
+    NCT WISH 프리퀀시 공동구매 매칭 API입니다. 인증은 Kakao OAuth만 지원하며
+    이메일 signup/login/password-reset API는 제공하지 않습니다.
+servers:
+  - url: http://localhost:4000
+tags:
+  - name: Auth
+  - name: Users
+  - name: Stores
+  - name: Events
+  - name: Posts
+  - name: Reviews
+  - name: Favorites
+  - name: Reports
+  - name: Admin
+  - name: Health
+paths:
+  /api/v1/health:
+    get:
+      tags: [Health]
+      summary: 프로세스 및 DB 상태 확인
+      responses:
+        "200": { $ref: "#/components/responses/Success" }
+        "503": { $ref: "#/components/responses/Error" }
+  /api/v1/auth/kakao/start:
+    get:
+      tags: [Auth]
+      summary: Kakao 로그인 시작
+      description: OAuth state signed HttpOnly cookie를 설정하고 Kakao 인가 페이지로 리다이렉트합니다.
+      responses:
+        "302": { description: Kakao authorize redirect }
+  /api/v1/auth/kakao/callback:
+    get:
+      tags: [Auth]
+      summary: Kakao OAuth callback
+      parameters:
+        - { name: code, in: query, schema: { type: string } }
+        - { name: state, in: query, schema: { type: string } }
+        - { name: error, in: query, schema: { type: string } }
+        - { name: error_description, in: query, schema: { type: string } }
+      responses:
+        "302": { description: 고정된 성공 또는 실패 프론트엔드 URL로 redirect }
+  /api/v1/auth/refresh:
+    post:
+      tags: [Auth]
+      summary: Refresh Token 회전
+      security: [{ refreshCookie: [] }]
+      responses:
+        "200": { $ref: "#/components/responses/Success" }
+        "401": { $ref: "#/components/responses/Error" }
+  /api/v1/auth/logout:
+    post:
+      tags: [Auth]
+      summary: 자체 세션 로그아웃
+      responses:
+        "204": { description: 로그아웃 완료 }
+  /api/v1/auth/me:
+    get:
+      tags: [Auth]
+      summary: 내 공개 정보
+      security: [{ bearerAuth: [] }, { accessCookie: [] }]
+      responses:
+        "200": { $ref: "#/components/responses/Success" }
+        "401": { $ref: "#/components/responses/Error" }
+  /api/v1/users/{id}:
+    get:
+      tags: [Users]
+      summary: 공개 프로필
+      parameters: [{ $ref: "#/components/parameters/Id" }]
+      responses:
+        "200": { $ref: "#/components/responses/Success" }
+        "404": { $ref: "#/components/responses/Error" }
+  /api/v1/users/me:
+    patch:
+      tags: [Users]
+      summary: 내 닉네임 수정
+      security: [{ bearerAuth: [] }, { accessCookie: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [nickname]
+              properties: { nickname: { type: string, minLength: 2, maxLength: 20 } }
+      responses:
+        "200": { $ref: "#/components/responses/Success" }
+        "409": { $ref: "#/components/responses/Error" }
+  /api/v1/users/{id}/posts:
+    get:
+      tags: [Users]
+      summary: 사용자 작성글
+      parameters:
+        - { $ref: "#/components/parameters/Id" }
+        - { $ref: "#/components/parameters/Page" }
+        - { $ref: "#/components/parameters/Limit" }
+      responses: { "200": { $ref: "#/components/responses/List" } }
+  /api/v1/users/{id}/reviews:
+    get:
+      tags: [Users]
+      summary: 사용자가 받은 후기
+      parameters:
+        - { $ref: "#/components/parameters/Id" }
+        - { $ref: "#/components/parameters/Page" }
+        - { $ref: "#/components/parameters/Limit" }
+      responses: { "200": { $ref: "#/components/responses/List" } }
+  /api/v1/stores:
+    get:
+      tags: [Stores]
+      summary: 매장 검색
+      parameters:
+        - { name: region, in: query, schema: { type: string } }
+        - { name: keyword, in: query, schema: { type: string } }
+        - { $ref: "#/components/parameters/Page" }
+        - { $ref: "#/components/parameters/Limit" }
+      responses: { "200": { $ref: "#/components/responses/List" } }
+  /api/v1/stores/{id}:
+    get:
+      tags: [Stores]
+      summary: 매장 상세
+      parameters: [{ $ref: "#/components/parameters/Id" }]
+      responses:
+        "200": { $ref: "#/components/responses/Success" }
+        "404": { $ref: "#/components/responses/Error" }
+  /api/v1/events:
+    get:
+      tags: [Events]
+      summary: 이벤트 목록
+      parameters:
+        - { name: active, in: query, schema: { type: boolean } }
+        - { $ref: "#/components/parameters/Page" }
+        - { $ref: "#/components/parameters/Limit" }
+      responses: { "200": { $ref: "#/components/responses/List" } }
+  /api/v1/events/{id}:
+    get:
+      tags: [Events]
+      summary: 이벤트 상세
+      parameters: [{ $ref: "#/components/parameters/Id" }]
+      responses:
+        "200": { $ref: "#/components/responses/Success" }
+        "404": { $ref: "#/components/responses/Error" }
+  /api/v1/posts:
+    get:
+      tags: [Posts]
+      summary: 모집글 검색
+      description: 목록 응답에는 openChatUrl이 포함되지 않습니다.
+      parameters:
+        - { name: region, in: query, schema: { type: string } }
+        - { name: storeId, in: query, schema: { type: string } }
+        - { name: storeName, in: query, schema: { type: string } }
+        - { name: minDiscount, in: query, schema: { type: integer, minimum: 1, maximum: 100 } }
+        - { name: maxDiscount, in: query, schema: { type: integer, minimum: 1, maximum: 100 } }
+        - { name: minRemainCount, in: query, schema: { type: integer, minimum: 0 } }
+        - { name: status, in: query, schema: { $ref: "#/components/schemas/PostStatus" } }
+        - { name: eventId, in: query, schema: { type: string } }
+        - { name: meetingFrom, in: query, schema: { type: string, format: date-time } }
+        - { name: meetingTo, in: query, schema: { type: string, format: date-time } }
+        - {
+            name: sort,
+            in: query,
+            schema:
+              {
+                type: string,
+                enum: [latest, meetingSoon, discountHigh, remainLow],
+                default: latest
+              }
+          }
+        - { $ref: "#/components/parameters/Page" }
+        - { $ref: "#/components/parameters/Limit" }
+      responses: { "200": { $ref: "#/components/responses/List" } }
+    post:
+      tags: [Posts]
+      summary: 모집글 생성
+      security: [{ bearerAuth: [] }, { accessCookie: [] }]
+      requestBody: { $ref: "#/components/requestBodies/PostCreate" }
+      responses:
+        "201": { $ref: "#/components/responses/Success" }
+        "400": { $ref: "#/components/responses/Error" }
+  /api/v1/posts/{id}:
+    get:
+      tags: [Posts]
+      summary: 모집글 상세
+      description: openChatUrl 노출은 인증 여부, 마감/삭제 상태 및 작성자/관리자 권한에 따라 달라집니다.
+      parameters: [{ $ref: "#/components/parameters/Id" }]
+      responses:
+        "200": { $ref: "#/components/responses/Success" }
+        "404": { $ref: "#/components/responses/Error" }
+    patch:
+      tags: [Posts]
+      summary: 모집글 수정
+      security: [{ bearerAuth: [] }, { accessCookie: [] }]
+      parameters: [{ $ref: "#/components/parameters/Id" }]
+      requestBody: { $ref: "#/components/requestBodies/PostUpdate" }
+      responses:
+        "200": { $ref: "#/components/responses/Success" }
+        "403": { $ref: "#/components/responses/Error" }
+    delete:
+      tags: [Posts]
+      summary: 모집글 soft delete
+      security: [{ bearerAuth: [] }, { accessCookie: [] }]
+      parameters: [{ $ref: "#/components/parameters/Id" }]
+      responses: { "204": { description: 삭제 완료 } }
+  /api/v1/posts/{id}/close:
+    patch:
+      tags: [Posts]
+      summary: 모집글 마감 (멱등)
+      security: [{ bearerAuth: [] }, { accessCookie: [] }]
+      parameters: [{ $ref: "#/components/parameters/Id" }]
+      responses: { "200": { $ref: "#/components/responses/Success" } }
+  /api/v1/posts/{id}/remain-count:
+    patch:
+      tags: [Posts]
+      summary: 남은 수량 변경
+      security: [{ bearerAuth: [] }, { accessCookie: [] }]
+      parameters: [{ $ref: "#/components/parameters/Id" }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [remainCount]
+              properties: { remainCount: { type: integer, minimum: 0, maximum: 100 } }
+      responses: { "200": { $ref: "#/components/responses/Success" } }
+  /api/v1/reviews:
+    post:
+      tags: [Reviews]
+      summary: 후기 작성
+      security: [{ bearerAuth: [] }, { accessCookie: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ReviewCreate" }
+      responses:
+        "201": { $ref: "#/components/responses/Success" }
+        "409": { $ref: "#/components/responses/Error" }
+  /api/v1/reviews/users/{userId}:
+    get:
+      tags: [Reviews]
+      summary: 사용자가 받은 후기
+      parameters:
+        - { name: userId, in: path, required: true, schema: { type: string } }
+        - { $ref: "#/components/parameters/Page" }
+        - { $ref: "#/components/parameters/Limit" }
+      responses: { "200": { $ref: "#/components/responses/List" } }
+  /api/v1/posts/{postId}/favorite:
+    post:
+      tags: [Favorites]
+      summary: 즐겨찾기 추가 (멱등)
+      security: [{ bearerAuth: [] }, { accessCookie: [] }]
+      parameters: [{ $ref: "#/components/parameters/PostId" }]
+      responses: { "201": { $ref: "#/components/responses/Success" } }
+    delete:
+      tags: [Favorites]
+      summary: 즐겨찾기 삭제 (멱등)
+      security: [{ bearerAuth: [] }, { accessCookie: [] }]
+      parameters: [{ $ref: "#/components/parameters/PostId" }]
+      responses: { "204": { description: 삭제 완료 } }
+  /api/v1/favorites:
+    get:
+      tags: [Favorites]
+      summary: 내 즐겨찾기
+      security: [{ bearerAuth: [] }, { accessCookie: [] }]
+      parameters:
+        - { $ref: "#/components/parameters/Page" }
+        - { $ref: "#/components/parameters/Limit" }
+      responses: { "200": { $ref: "#/components/responses/List" } }
+  /api/v1/reports:
+    post:
+      tags: [Reports]
+      summary: 모집글 신고
+      security: [{ bearerAuth: [] }, { accessCookie: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ReportCreate" }
+      responses:
+        "201": { $ref: "#/components/responses/Success" }
+        "409": { $ref: "#/components/responses/Error" }
+  /api/v1/admin/reports:
+    get:
+      tags: [Admin]
+      summary: 신고 목록
+      security: [{ bearerAuth: [] }, { accessCookie: [] }]
+      parameters:
+        - { name: status, in: query, schema: { $ref: "#/components/schemas/ReportStatus" } }
+        - { $ref: "#/components/parameters/Page" }
+        - { $ref: "#/components/parameters/Limit" }
+      responses:
+        {
+          "200": { $ref: "#/components/responses/List" },
+          "403": { $ref: "#/components/responses/Error" }
+        }
+  /api/v1/admin/reports/{id}:
+    get:
+      tags: [Admin]
+      summary: 신고 상세
+      security: [{ bearerAuth: [] }, { accessCookie: [] }]
+      parameters: [{ $ref: "#/components/parameters/Id" }]
+      responses: { "200": { $ref: "#/components/responses/Success" } }
+    patch:
+      tags: [Admin]
+      summary: 신고 처리
+      security: [{ bearerAuth: [] }, { accessCookie: [] }]
+      parameters: [{ $ref: "#/components/parameters/Id" }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [status, adminNote]
+              properties:
+                status: { type: string, enum: [RESOLVED, REJECTED] }
+                adminNote: { type: string, minLength: 1, maxLength: 1000 }
+      responses: { "200": { $ref: "#/components/responses/Success" } }
+  /api/v1/admin/users:
+    get:
+      tags: [Admin]
+      summary: 사용자 목록
+      security: [{ bearerAuth: [] }, { accessCookie: [] }]
+      parameters:
+        - { name: status, in: query, schema: { type: string, enum: [ACTIVE, SUSPENDED] } }
+        - { name: role, in: query, schema: { type: string, enum: [USER, ADMIN] } }
+        - { name: keyword, in: query, schema: { type: string } }
+        - { $ref: "#/components/parameters/Page" }
+        - { $ref: "#/components/parameters/Limit" }
+      responses: { "200": { $ref: "#/components/responses/List" } }
+  /api/v1/admin/users/{id}/suspend:
+    patch:
+      tags: [Admin]
+      summary: 사용자 정지 및 모든 세션 revoke
+      security: [{ bearerAuth: [] }, { accessCookie: [] }]
+      parameters: [{ $ref: "#/components/parameters/Id" }]
+      requestBody: { $ref: "#/components/requestBodies/ReasonRequired" }
+      responses: { "200": { $ref: "#/components/responses/Success" } }
+  /api/v1/admin/users/{id}/unsuspend:
+    patch:
+      tags: [Admin]
+      summary: 사용자 정지 해제
+      security: [{ bearerAuth: [] }, { accessCookie: [] }]
+      parameters: [{ $ref: "#/components/parameters/Id" }]
+      requestBody: { $ref: "#/components/requestBodies/ReasonOptional" }
+      responses: { "200": { $ref: "#/components/responses/Success" } }
+  /api/v1/admin/posts:
+    get:
+      tags: [Admin]
+      summary: 관리자 게시글 목록
+      security: [{ bearerAuth: [] }, { accessCookie: [] }]
+      parameters:
+        - { name: deleted, in: query, schema: { type: boolean } }
+        - { $ref: "#/components/parameters/Page" }
+        - { $ref: "#/components/parameters/Limit" }
+      responses: { "200": { $ref: "#/components/responses/List" } }
+  /api/v1/admin/posts/{id}:
+    delete:
+      tags: [Admin]
+      summary: 관리자 게시글 soft delete
+      security: [{ bearerAuth: [] }, { accessCookie: [] }]
+      parameters: [{ $ref: "#/components/parameters/Id" }]
+      requestBody: { $ref: "#/components/requestBodies/ReasonRequired" }
+      responses: { "200": { $ref: "#/components/responses/Success" } }
+  /api/v1/admin/posts/{id}/restore:
+    patch:
+      tags: [Admin]
+      summary: 관리자 게시글 복구
+      security: [{ bearerAuth: [] }, { accessCookie: [] }]
+      parameters: [{ $ref: "#/components/parameters/Id" }]
+      requestBody: { $ref: "#/components/requestBodies/ReasonOptional" }
+      responses: { "200": { $ref: "#/components/responses/Success" } }
+  /api/v1/admin/stores:
+    post:
+      tags: [Admin]
+      summary: 매장 생성
+      security: [{ bearerAuth: [] }, { accessCookie: [] }]
+      requestBody: { $ref: "#/components/requestBodies/StoreCreate" }
+      responses: { "201": { $ref: "#/components/responses/Success" } }
+  /api/v1/admin/stores/{id}:
+    patch:
+      tags: [Admin]
+      summary: 매장 수정
+      security: [{ bearerAuth: [] }, { accessCookie: [] }]
+      parameters: [{ $ref: "#/components/parameters/Id" }]
+      requestBody: { $ref: "#/components/requestBodies/StoreUpdate" }
+      responses: { "200": { $ref: "#/components/responses/Success" } }
+  /api/v1/admin/events:
+    post:
+      tags: [Admin]
+      summary: 이벤트 생성
+      security: [{ bearerAuth: [] }, { accessCookie: [] }]
+      requestBody: { $ref: "#/components/requestBodies/EventCreate" }
+      responses: { "201": { $ref: "#/components/responses/Success" } }
+  /api/v1/admin/events/{id}:
+    patch:
+      tags: [Admin]
+      summary: 이벤트 수정
+      security: [{ bearerAuth: [] }, { accessCookie: [] }]
+      parameters: [{ $ref: "#/components/parameters/Id" }]
+      requestBody: { $ref: "#/components/requestBodies/EventUpdate" }
+      responses: { "200": { $ref: "#/components/responses/Success" } }
+    delete:
+      tags: [Admin]
+      summary: 이벤트 삭제
+      security: [{ bearerAuth: [] }, { accessCookie: [] }]
+      parameters: [{ $ref: "#/components/parameters/Id" }]
+      responses: { "204": { description: 삭제 완료 } }
+components:
+  securitySchemes:
+    bearerAuth: { type: http, scheme: bearer, bearerFormat: JWT }
+    accessCookie: { type: apiKey, in: cookie, name: wm_access_token }
+    refreshCookie: { type: apiKey, in: cookie, name: wm_refresh_token }
+  parameters:
+    Id: { name: id, in: path, required: true, schema: { type: string } }
+    PostId: { name: postId, in: path, required: true, schema: { type: string } }
+    Page: { name: page, in: query, schema: { type: integer, minimum: 1, default: 1 } }
+    Limit:
+      { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 100, default: 20 } }
+  schemas:
+    PostStatus: { type: string, enum: [OPEN, CLOSED] }
+    ReportReason: { type: string, enum: [FRAUD, NO_SHOW, ABUSE, OTHER] }
+    ReportStatus: { type: string, enum: [PENDING, RESOLVED, REJECTED] }
+    Pagination:
+      type: object
+      required: [page, limit, total, totalPages, hasNext]
+      properties:
+        page: { type: integer }
+        limit: { type: integer }
+        total: { type: integer }
+        totalPages: { type: integer }
+        hasNext: { type: boolean }
+    Success:
+      type: object
+      required: [success, data]
+      properties:
+        success: { type: boolean, const: true }
+        data: {}
+    List:
+      type: object
+      required: [success, data]
+      properties:
+        success: { type: boolean, const: true }
+        data:
+          type: object
+          required: [items, pagination]
+          properties:
+            items: { type: array, items: {} }
+            pagination: { $ref: "#/components/schemas/Pagination" }
+    Error:
+      type: object
+      required: [success, error]
+      properties:
+        success: { type: boolean, const: false }
+        error:
+          type: object
+          required: [code, message, requestId]
+          properties:
+            code: { type: string }
+            message: { type: string }
+            details: {}
+            requestId: { type: string }
+    PostInput:
+      type: object
+      additionalProperties: false
+      properties:
+        storeId: { type: string }
+        eventId: { type: [string, "null"] }
+        discount: { type: integer, minimum: 1, maximum: 100 }
+        totalCount: { type: integer, minimum: 1, maximum: 100 }
+        remainCount: { type: integer, minimum: 0, maximum: 100 }
+        meetingTime: { type: string, format: date-time }
+        meetingPlace: { type: string, minLength: 1, maxLength: 300 }
+        openChatUrl: { type: string, format: uri, pattern: '^https://open\\.kakao\\.com/' }
+        description: { type: [string, "null"], maxLength: 2000 }
+        imageUrl: { type: [string, "null"], format: uri }
+    ReviewCreate:
+      type: object
+      additionalProperties: false
+      required: [postId, rating, content]
+      properties:
+        postId: { type: string }
+        rating: { type: integer, minimum: 1, maximum: 5 }
+        content: { type: string, minLength: 1, maxLength: 500 }
+    ReportCreate:
+      type: object
+      additionalProperties: false
+      required: [targetPostId, reason]
+      properties:
+        targetPostId: { type: string }
+        reason: { $ref: "#/components/schemas/ReportReason" }
+        detail: { type: string, minLength: 1, maxLength: 1000 }
+    StoreInput:
+      type: object
+      additionalProperties: false
+      properties:
+        name: { type: string, minLength: 1, maxLength: 100 }
+        region: { type: string, minLength: 1, maxLength: 100 }
+        address: { type: string, minLength: 1, maxLength: 300 }
+        latitude: { type: number, minimum: -90, maximum: 90 }
+        longitude: { type: number, minimum: -180, maximum: 180 }
+    EventInput:
+      type: object
+      additionalProperties: false
+      properties:
+        title: { type: string, minLength: 1, maxLength: 150 }
+        description: { type: string, maxLength: 2000 }
+        startDate: { type: string, format: date-time }
+        endDate: { type: string, format: date-time }
+        bannerImage: { type: string, format: uri }
+        isActive: { type: boolean }
+  responses:
+    Success:
+      description: 성공
+      content: { application/json: { schema: { $ref: "#/components/schemas/Success" } } }
+    List:
+      description: 페이지 목록
+      content: { application/json: { schema: { $ref: "#/components/schemas/List" } } }
+    Error:
+      description: 오류
+      content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
+  requestBodies:
+    PostCreate:
+      required: true
+      content:
+        application/json:
+          schema:
+            allOf:
+              - { $ref: "#/components/schemas/PostInput" }
+              - {
+                  required:
+                    [
+                      storeId,
+                      discount,
+                      totalCount,
+                      remainCount,
+                      meetingTime,
+                      meetingPlace,
+                      openChatUrl
+                    ]
+                }
+    PostUpdate:
+      required: true
+      content: { application/json: { schema: { $ref: "#/components/schemas/PostInput" } } }
+    ReasonRequired:
+      required: true
+      content:
+        application/json:
+          schema:
+            type: object
+            additionalProperties: false
+            required: [reason]
+            properties: { reason: { type: string, minLength: 1, maxLength: 1000 } }
+    ReasonOptional:
+      required: true
+      content:
+        application/json:
+          schema:
+            type: object
+            additionalProperties: false
+            properties: { reason: { type: string, maxLength: 1000 } }
+    StoreCreate:
+      required: true
+      content:
+        application/json:
+          schema:
+            allOf:
+              - { $ref: "#/components/schemas/StoreInput" }
+              - { required: [name, region, address] }
+    StoreUpdate:
+      required: true
+      content: { application/json: { schema: { $ref: "#/components/schemas/StoreInput" } } }
+    EventCreate:
+      required: true
+      content:
+        application/json:
+          schema:
+            allOf:
+              - { $ref: "#/components/schemas/EventInput" }
+              - { required: [title, startDate, endDate] }
+    EventUpdate:
+      required: true
+      content: { application/json: { schema: { $ref: "#/components/schemas/EventInput" } } }
