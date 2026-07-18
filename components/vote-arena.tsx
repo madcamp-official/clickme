@@ -1364,32 +1364,6 @@ export function VoteArena({
     }
   }
 
-  async function handleDownloadImage() {
-    if (!lastAcceptedChoice || isShareLoading) return;
-    setIsShareLoading(true);
-    try {
-      const artifact = await getShareArtifact();
-      if (!artifact.imageUrl) throw new Error("image unavailable");
-      const response = await fetch(artifact.imageUrl);
-      if (!response.ok) throw new Error("image download failed");
-      const blobUrl = URL.createObjectURL(await response.blob());
-      const link = document.createElement("a");
-      link.href = blobUrl;
-      link.download = `tangsuyuk-${lastAcceptedChoice}.png`;
-      document.body.append(link);
-      link.click();
-      link.remove();
-      window.setTimeout(() => URL.revokeObjectURL(blobUrl), 1_000);
-      trackEvent("share_image_downloaded", { choice: lastAcceptedChoice });
-      showNotice({ tone: "success", message: "결과 카드를 저장했어요!" });
-    } catch {
-      showNotice({ tone: "error", message: "결과 이미지를 저장하지 못했어요. 링크 공유를 이용해 주세요." });
-    } finally {
-      setIsShareLoading(false);
-      void flushEvents();
-    }
-  }
-
   function handleFooterClick() {
     const now = Date.now();
     const recentClicks = footerClickTimes.current.filter(
@@ -1534,7 +1508,6 @@ export function VoteArena({
             </button>
             <div className="km-share-actions">
               <button disabled={isShareLoading} onClick={() => void handleCopyLink()} type="button">링크 복사</button>
-              <button disabled={isShareLoading} onClick={() => void handleDownloadImage()} type="button">결과 카드 저장</button>
             </div>
           </section>
         ) : null}

@@ -6,6 +6,7 @@ import {
   commentReadCapacity,
   tryAcquireDatabase,
 } from "../../../lib/server/capacity";
+import { isCommentBodyAllowed } from "../../../lib/server/comment-filter";
 import { formatComments } from "../../../lib/server/comments";
 import { isChoice } from "../../../lib/server/contracts";
 import { apiError, jsonNoStore, jsonPublicResult, readBoundedJsonObject, rejectUnsafeMutation } from "../../../lib/server/http";
@@ -63,6 +64,10 @@ export async function POST(request: NextRequest) {
     || commentBody.length > 240
   ) {
     return apiError(400, "댓글 요청 형식이 올바르지 않습니다.", "INVALID_COMMENT");
+  }
+
+  if (!isCommentBodyAllowed(commentBody)) {
+    return apiError(400, "댓글 내용을 확인해 주세요.", "COMMENT_REJECTED");
   }
 
   const visitor = getVisitorIdentity(request);

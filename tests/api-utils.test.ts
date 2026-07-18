@@ -19,6 +19,7 @@ import {
   validateEvents,
 } from "../lib/server/analytics-validation";
 import { CapacityGate, tryAcquireDatabase } from "../lib/server/capacity";
+import { isCommentBodyAllowed } from "../lib/server/comment-filter";
 import { isChoice } from "../lib/server/contracts";
 import { readBoundedJsonObject, readJsonObject, rejectUnsafeMutation } from "../lib/server/http";
 import { createReferralReceipt, verifyReferralReceipt } from "../lib/server/referral-receipt";
@@ -159,6 +160,56 @@ describe("comments endpoint validation", () => {
     });
     const response = await postComments(request);
     expect(response.status).toBe(400);
+  });
+
+  it("rejects a comment body caught by the content filter before touching the database", async () => {
+    process.env.NEXT_PUBLIC_SITE_URL = "https://clickme.example";
+    const request = new NextRequest("https://clickme.example/api/comments", {
+      method: "POST",
+      headers: { "content-type": "application/json", origin: "https://clickme.example" },
+      body: JSON.stringify({
+        choice: "dip",
+        requestId: "123e4567-e89b-42d3-a456-426614174098",
+        sessionId: "123e4567-e89b-42d3-a456-426614174001",
+        pageViewId: "123e4567-e89b-42d3-a456-426614174010",
+        body: "이 카드 진짜 개새끼같이 못생겼다",
+      }),
+    });
+    const response = await postComments(request);
+    expect(response.status).toBe(400);
+    const payload = await response.json();
+    expect(payload.code).toBe("COMMENT_REJECTED");
+  });
+});
+
+describe("comment content filter", () => {
+  it("allows ordinary comments", () => {
+    expect(isCommentBodyAllowed("카리나 비주얼 실화냐 진짜 예쁘다")).toBe(true);
+    expect(isCommentBodyAllowed("장원영 웃음 너무 좋아요 ㅎㅎ")).toBe(true);
+  });
+
+  it("blocks Korean profanity, including symbol-obfuscated forms", () => {
+    expect(isCommentBodyAllowed("이거 진짜 씨발 못생겼다")).toBe(false);
+    expect(isCommentBodyAllowed("시*발 이게 뭐야")).toBe(false);
+    expect(isCommentBodyAllowed("병신같은 소리하네")).toBe(false);
+  });
+
+  it("blocks English profanity and slurs case-insensitively", () => {
+    expect(isCommentBodyAllowed("this is FUCK ugly")).toBe(false);
+    expect(isCommentBodyAllowed("what a Bitch")).toBe(false);
+  });
+
+  it("does not flag benign text that merely contains a space near a banned word", () => {
+    // "씨 발표" (Mx. Bal's presentation) must not collapse into "씨발표" via
+    // real whitespace -- only symbol-based obfuscation is collapsed.
+    expect(isCommentBodyAllowed("아 씨 발표 진짜 잘했다")).toBe(true);
+  });
+
+  it("blocks links, emails, and phone numbers", () => {
+    expect(isCommentBodyAllowed("여기 놀러와 https://example.com/promo")).toBe(false);
+    expect(isCommentBodyAllowed("문의는 test@example.com 로 주세요")).toBe(false);
+    expect(isCommentBodyAllowed("연락처 010-1234-5678 남겨요")).toBe(false);
+    expect(isCommentBodyAllowed("제 사이트 example.kr 놀러오세요")).toBe(false);
   });
 });
 

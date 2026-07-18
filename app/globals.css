@@ -176,7 +176,7 @@ button:focus-visible { outline: 3px solid #fff200; outline-offset: 3px; }
 }
 .km-share:hover { opacity: .85; }
 .km-share:disabled, .km-share-actions button:disabled { cursor: wait; opacity: .5; }
-.km-share-actions { display: grid; gap: 8px; grid-template-columns: 1fr 1fr; margin-top: 10px; }
+.km-share-actions { display: grid; gap: 8px; grid-template-columns: 1fr; margin-top: 10px; }
 .km-share-actions button {
   background: transparent;
   border: 1px solid rgba(255,255,255,.2);
