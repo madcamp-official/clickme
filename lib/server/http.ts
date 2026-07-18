@@ -7,8 +7,14 @@ const NO_STORE_HEADERS = {
   Pragma: "no-cache",
 } as const;
 
+// No stale-while-revalidate: that directive is for downstream (browser/CDN)
+// caches to reuse instantly, which at a 1s client poll interval meant every
+// fetch() got last cycle's cached copy while the real refresh happened
+// silently in the background -- results always looked one cycle behind.
+// Nginx's own edge cache (proxy_cache_valid 1s + proxy_cache_background_update)
+// doesn't need this directive; s-maxage=1 alone is what it honors.
 const PUBLIC_RESULT_CACHE_HEADERS = {
-  "Cache-Control": "public, max-age=0, s-maxage=1, stale-while-revalidate=5",
+  "Cache-Control": "public, max-age=0, s-maxage=1",
 } as const;
 
 export type JsonReadResult =
