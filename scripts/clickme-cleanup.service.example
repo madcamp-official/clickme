@@ -1,0 +1,37 @@
+[Unit]
+Description=Delete expired Clickme operational rate buckets
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+User=clickme
+Group=clickme
+WorkingDirectory=/srv/clickme
+EnvironmentFile=/srv/clickme/shared/clickme.env
+ExecStart=/srv/clickme/shared/bin/cleanup-operational-data.sh
+UMask=0077
+TimeoutStartSec=45s
+MemoryMax=64M
+TasksMax=16
+LimitNOFILE=256
+PrivateTmp=true
+PrivateDevices=true
+NoNewPrivileges=true
+ProtectHome=true
+ProtectSystem=strict
+ProtectClock=true
+ProtectControlGroups=true
+ProtectHostname=true
+ProtectKernelLogs=true
+ProtectKernelModules=true
+ProtectKernelTunables=true
+ProtectProc=invisible
+ProcSubset=pid
+CapabilityBoundingSet=
+LockPersonality=true
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+RestrictNamespaces=true
+RestrictRealtime=true
+RestrictSUIDSGID=true
+SystemCallArchitectures=native

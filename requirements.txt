@@ -1,0 +1,26 @@
+# This project uses npm, not pip.
+# Reproduce the installation with: npm ci
+# The package-lock.json file is the canonical dependency lock.
+# Browser check setup: npx playwright install chromium
+# Ubuntu browser libraries: npx playwright install-deps chromium
+
+# Runtime modules
+@supabase/supabase-js@2.110.6
+next@16.2.10
+react@19.2.7
+react-dom@19.2.7
+sharp@0.34.5
+
+# Development modules
+@playwright/test@1.61.1
+@types/node@26.1.1
+@types/react@19.2.17
+@types/react-dom@19.2.3
+eslint@9.39.5
+eslint-config-next@16.2.10
+supabase@2.109.1
+typescript@6.0.3
+vitest@4.1.10
+
+# Security override applied by package.json
+postcss@8.5.19

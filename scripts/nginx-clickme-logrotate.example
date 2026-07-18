@@ -1,0 +1,15 @@
+/var/log/nginx/clickme.access.log /var/log/nginx/clickme.error.log {
+    daily
+    rotate 7
+    maxsize 20M
+    missingok
+    notifempty
+    compress
+    delaycompress
+    sharedscripts
+    postrotate
+        if [ -r /run/nginx.pid ]; then
+            kill -USR1 "$(cat /run/nginx.pid)"
+        fi
+    endscript
+}

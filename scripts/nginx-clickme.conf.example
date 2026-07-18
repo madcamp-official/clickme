@@ -1,0 +1,343 @@
+# This file is included from nginx.conf's `http {}` context (for example via
+# /etc/nginx/sites-enabled/*). It is intentionally not a complete nginx.conf.
+# Cloudflare Tunnel must use http://127.0.0.1:3000 as its origin.
+
+# The realip module parses CF-Connecting-IP as an actual IPv4/IPv6 address.
+# Invalid values leave the loopback peer unchanged and therefore become the
+# shared `unknown` key instead of an attacker-controlled rate-limit key. The
+# tunnel is the only expected loopback client; other local callers are trusted
+# operators and must not expose port 3000 outside the host.
+set_real_ip_from 127.0.0.1;
+set_real_ip_from ::1;
+real_ip_header CF-Connecting-IP;
+real_ip_recursive off;
+
+map $remote_addr $clickme_client_ip {
+    default     $remote_addr;
+    127.0.0.1   unknown;
+    ::1         unknown;
+}
+
+map $http_origin $clickme_origin_ok {
+    default                              0;
+    "https://clickme.madcamp-kaist.org" 1;
+}
+
+map $http_sec_fetch_site $clickme_fetch_site_ok {
+    default      0;
+    "same-origin" 1;
+}
+
+map $http_content_type $clickme_json_ok {
+    default                                      0;
+    "~^application/json(?:\s*;.*)?$"             1;
+}
+
+map $http_x_clickme_csrf $clickme_csrf_present {
+    default 1;
+    ""      0;
+}
+
+map $cookie_clickme_session $clickme_session_present {
+    default 1;
+    ""      0;
+}
+
+# Empty keys are not counted by limit_req. Fall back to the network key until
+# the corresponding signed cookie exists.
+map $cookie_clickme_visitor $clickme_visitor_limit_key {
+    default $cookie_clickme_visitor;
+    ""      $clickme_client_ip;
+}
+
+map $cookie_clickme_session $clickme_session_limit_key {
+    default $cookie_clickme_session;
+    ""      $clickme_client_ip;
+}
+
+# Do not put referral tokens, query strings, IPs, user agents, or referrers in
+# the access log. Rate-limit rejections are sampled at 1% to bound disk growth.
+map $uri $clickme_log_route {
+    default                                          $uri;
+    ~^/r/                                            /r/:token;
+    ~^/api/share-images/                             /api/share-images/:token.png;
+}
+
+split_clients $request_id $clickme_rate_sample {
+    1%      1;
+    *       0;
+}
+
+map "$status:$clickme_rate_sample" $clickme_loggable {
+    default     1;
+    ~^429:0$    0;
+}
+
+log_format clickme_ops escape=json
+    '{"time":"$time_iso8601","request_id":"$request_id",'
+    '"method":"$request_method","route":"$clickme_log_route",'
+    '"status":$status,"duration":$request_time,"bytes":$body_bytes_sent,'
+    '"upstream_status":"$upstream_status","cache":"$upstream_cache_status"}';
+
+limit_conn_zone $clickme_client_ip zone=clickme_connections:10m;
+limit_conn_zone $server_name zone=clickme_global_connections:1m;
+limit_req_zone $clickme_client_ip zone=clickme_vote_net:10m rate=20r/s;
+limit_req_zone $clickme_client_ip zone=clickme_mutation_net:10m rate=60r/s;
+limit_req_zone $clickme_client_ip zone=clickme_session_net:10m rate=300r/m;
+limit_req_zone $clickme_visitor_limit_key zone=clickme_session_visitor:10m rate=3r/m;
+limit_req_zone $clickme_session_limit_key zone=clickme_heartbeat:10m rate=6r/m;
+limit_req_zone $clickme_session_limit_key zone=clickme_events:10m rate=12r/m;
+limit_req_zone $clickme_visitor_limit_key zone=clickme_shares:10m rate=10r/m;
+limit_req_zone $clickme_client_ip zone=clickme_public_read:10m rate=300r/m;
+
+proxy_cache_path /var/cache/nginx/clickme
+    levels=1:2
+    keys_zone=clickme_results:10m
+    max_size=64m
+    inactive=10m
+    use_temp_path=off;
+
+upstream clickme_next {
+    server 127.0.0.1:3001;
+    keepalive 32;
+}
+
+# Reject every Host except the one explicitly attached to the tunnel.
+server {
+    listen 127.0.0.1:3000 default_server;
+    server_name _;
+    access_log off;
+    error_log /dev/null crit;
+    return 444;
+}
+
+server {
+    listen 127.0.0.1:3000;
+    server_name clickme.madcamp-kaist.org;
+    server_tokens off;
+
+    access_log /var/log/nginx/clickme.access.log clickme_ops buffer=32k flush=5s if=$clickme_loggable;
+    # Nginx's request error format contains the real client address and raw
+    # URI and cannot use log_format. Keep only critical process-level failures;
+    # request status, duration and request IDs remain in normalized access JSON.
+    error_log /var/log/nginx/clickme.error.log crit;
+
+    limit_conn clickme_connections 40;
+    limit_conn clickme_global_connections 512;
+    limit_conn_status 429;
+    limit_req_status 429;
+    limit_conn_log_level notice;
+    limit_req_log_level notice;
+
+    client_max_body_size 16k;
+    client_body_buffer_size 16k;
+    client_body_timeout 10s;
+    client_header_timeout 10s;
+    large_client_header_buffers 2 8k;
+    keepalive_timeout 15s;
+    keepalive_requests 200;
+    send_timeout 15s;
+    reset_timedout_connection on;
+
+    proxy_http_version 1.1;
+    proxy_set_header Connection "";
+    proxy_set_header Host $host;
+    proxy_set_header X-Forwarded-Proto https;
+
+    # Drop spoofable inbound forwarding headers. The application trusts only
+    # this private header in production.
+    proxy_set_header X-Forwarded-For "";
+    proxy_set_header X-Real-IP "";
+    proxy_set_header CF-Connecting-IP "";
+    proxy_set_header X-Clickme-Client-IP $clickme_client_ip;
+    proxy_set_header X-Clickme-Request-ID $request_id;
+
+    proxy_connect_timeout 3s;
+    proxy_send_timeout 10s;
+    proxy_read_timeout 15s;
+    proxy_next_upstream off;
+
+    # Nginx-generated rate-limit responses are fixed and small. Upstream 429s
+    # remain untouched because proxy_intercept_errors is disabled.
+    error_page 429 = @clickme_rate_limited;
+    location @clickme_rate_limited {
+        default_type application/json;
+        add_header Retry-After 1 always;
+        return 429 '{"error":"요청이 너무 빠릅니다.","code":"RATE_LIMITED"}';
+    }
+
+    # Public liveness contains no DB query. Readiness bypasses Nginx and is
+    # checked only at http://127.0.0.1:3001/api/ready.
+    location = /api/ready {
+        return 404;
+    }
+
+    location = /api/health {
+        if ($request_method !~ ^(?:GET|HEAD)$) { return 405; }
+        limit_req zone=clickme_public_read burst=20 nodelay;
+        proxy_pass http://clickme_next;
+    }
+
+    location = /api/results {
+        if ($request_method !~ ^(?:GET|HEAD)$) { return 405; }
+        limit_req zone=clickme_public_read burst=30 nodelay;
+
+        proxy_cache clickme_results;
+        proxy_cache_key "$scheme|$host|$uri";
+        proxy_cache_methods GET HEAD;
+        proxy_cache_valid 200 1s;
+        proxy_cache_lock on;
+        proxy_cache_lock_timeout 2s;
+        proxy_cache_lock_age 2s;
+        proxy_cache_background_update on;
+        # Keep one canonical representation because Vary is intentionally
+        # ignored for this public JSON response.
+        proxy_set_header Accept-Encoding "";
+        # The application supplies s-maxage=1, stale-while-revalidate=5. Ignore
+        # Next.js router Vary headers so attackers cannot manufacture cache
+        # variants for this representation-independent JSON response.
+        proxy_cache_use_stale updating;
+        proxy_ignore_headers Set-Cookie Vary;
+        proxy_hide_header Set-Cookie;
+        add_header X-Clickme-Cache $upstream_cache_status always;
+
+        proxy_pass http://clickme_next;
+    }
+
+    # Comment functionality is intentionally retired at the edge. This never
+    # reaches Next.js or the database, for any HTTP method.
+    location = /api/comments {
+        default_type application/json;
+        add_header Cache-Control "no-store" always;
+        return 410 '{"error":"댓글 기능이 종료되었습니다.","code":"COMMENTS_DISABLED"}';
+    }
+
+    # Keep the footer Easter egg out of the application process.
+    location = /api/next {
+        if ($request_method != GET) { return 405; }
+        add_header Cache-Control "no-store" always;
+        add_header Referrer-Policy "no-referrer" always;
+        return 302 https://seojiny.com;
+    }
+
+    # Session bootstrap is the only mutation without a pre-existing session or
+    # CSRF token. Origin, Fetch Metadata, JSON, and two rate-limit keys remain
+    # mandatory.
+    location = /api/session {
+        if ($request_method != POST) { return 405; }
+        if ($clickme_origin_ok = 0) { return 403; }
+        if ($clickme_fetch_site_ok = 0) { return 403; }
+        if ($clickme_json_ok = 0) { return 415; }
+
+        client_max_body_size 4k;
+        limit_req zone=clickme_session_net burst=20 nodelay;
+        limit_req zone=clickme_session_visitor burst=2 nodelay;
+        proxy_pass http://clickme_next;
+    }
+
+    location = /api/analytics/heartbeat {
+        if ($request_method != POST) { return 405; }
+        if ($clickme_origin_ok = 0) { return 403; }
+        if ($clickme_fetch_site_ok = 0) { return 403; }
+        if ($clickme_json_ok = 0) { return 415; }
+        if ($clickme_csrf_present = 0) { return 403; }
+        if ($clickme_session_present = 0) { return 409; }
+
+        client_max_body_size 4k;
+        limit_req zone=clickme_mutation_net burst=30 nodelay;
+        limit_req zone=clickme_heartbeat burst=2 nodelay;
+        proxy_pass http://clickme_next;
+    }
+
+    location = /api/analytics/events {
+        if ($request_method != POST) { return 405; }
+        if ($clickme_origin_ok = 0) { return 403; }
+        if ($clickme_fetch_site_ok = 0) { return 403; }
+        if ($clickme_json_ok = 0) { return 415; }
+        if ($clickme_csrf_present = 0) { return 403; }
+        if ($clickme_session_present = 0) { return 409; }
+
+        client_max_body_size 16k;
+        limit_req zone=clickme_mutation_net burst=30 nodelay;
+        limit_req zone=clickme_events burst=4 nodelay;
+        proxy_pass http://clickme_next;
+    }
+
+    location = /api/shares {
+        if ($request_method != POST) { return 405; }
+        if ($clickme_origin_ok = 0) { return 403; }
+        if ($clickme_fetch_site_ok = 0) { return 403; }
+        if ($clickme_json_ok = 0) { return 415; }
+        if ($clickme_csrf_present = 0) { return 403; }
+        if ($clickme_session_present = 0) { return 409; }
+
+        client_max_body_size 4k;
+        limit_req zone=clickme_mutation_net burst=30 nodelay;
+        limit_req zone=clickme_shares burst=5 nodelay;
+        proxy_pass http://clickme_next;
+    }
+
+    location = /api/vote {
+        if ($request_method != POST) { return 405; }
+        if ($clickme_origin_ok = 0) { return 403; }
+        if ($clickme_fetch_site_ok = 0) { return 403; }
+        if ($clickme_json_ok = 0) { return 415; }
+        if ($clickme_csrf_present = 0) { return 403; }
+        if ($clickme_session_present = 0) { return 409; }
+
+        client_max_body_size 4k;
+        limit_req zone=clickme_vote_net burst=30 nodelay;
+        proxy_pass http://clickme_next;
+    }
+
+    # A referral token is 128 random bits encoded as 22 unpadded base64url
+    # characters. Malformed tokens return before they can cause a DB lookup.
+    location ~ "^/r/[A-Za-z0-9_-]{22}$" {
+        if ($request_method !~ ^(?:GET|HEAD)$) { return 405; }
+        limit_req zone=clickme_public_read burst=30 nodelay;
+        add_header X-Robots-Tag "noindex, nofollow, noarchive" always;
+        proxy_pass http://clickme_next;
+    }
+
+    location /r/ {
+        return 404;
+    }
+
+    location ~ "^/api/share-images/[A-Za-z0-9_-]{22}\.png$" {
+        if ($request_method !~ ^(?:GET|HEAD)$) { return 405; }
+        limit_req zone=clickme_public_read burst=30 nodelay;
+
+        proxy_cache clickme_results;
+        proxy_cache_key "$scheme|$host|$uri";
+        proxy_cache_valid 200 365d;
+        proxy_cache_lock on;
+        proxy_cache_use_stale error timeout updating http_500 http_502 http_503 http_504;
+        proxy_ignore_headers Set-Cookie;
+        proxy_hide_header Set-Cookie;
+        proxy_hide_header Cache-Control;
+        add_header Cache-Control "public, max-age=31536000, immutable" always;
+        add_header X-Robots-Tag "noindex, nofollow, noarchive" always;
+
+        proxy_pass http://clickme_next;
+    }
+
+    location /api/share-images/ {
+        return 404;
+    }
+
+    # Every writable API has an explicit guarded location above. Unknown POST
+    # routes are therefore rejected, which prevents a future mutation from
+    # accidentally bypassing the shared Origin/session policy.
+    location /api/ {
+        if ($request_method !~ ^(?:GET|HEAD)$) { return 405; }
+        client_max_body_size 4k;
+        limit_req zone=clickme_public_read burst=20 nodelay;
+        proxy_pass http://clickme_next;
+    }
+
+    location / {
+        if ($request_method !~ ^(?:GET|HEAD)$) { return 405; }
+        limit_req zone=clickme_public_read burst=30 nodelay;
+        proxy_pass http://clickme_next;
+    }
+}

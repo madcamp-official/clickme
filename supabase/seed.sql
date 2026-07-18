@@ -1,0 +1,1 @@
+-- Production-safe seed: this application intentionally starts without synthetic votes or comments.
