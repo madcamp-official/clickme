@@ -11,5 +11,6 @@ export default defineConfig([
     "next-env.d.ts",
     "Viral balance game webpage/**",
     "topic2/**",
+    "topic3/**",
   ]),
 ]);
