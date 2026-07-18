@@ -38,6 +38,7 @@
   "exclude": [
     "node_modules",
     "Viral balance game webpage",
-    "topic2"
+    "topic2",
+    "topic3"
   ]
 }

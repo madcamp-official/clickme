@@ -26,6 +26,7 @@ cloudflared.deb
 # standalone design prototypes (not deployed with the Next.js application)
 /Viral balance game webpage/
 /topic2/
+/topic3/
 
 # Supabase local metadata
 /supabase/.temp
