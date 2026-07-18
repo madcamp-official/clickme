@@ -116,7 +116,6 @@ const FOOTER_EASTER_EGG_WINDOW_MS = 5_000;
 const FOOTER_EASTER_EGG_ROUTE = "/api/next";
 const ACTIVE_INPUT_WINDOW_MS = 60_000;
 const RESULTS_POLL_MIN_MS = 1_000;
-const RESULTS_POLL_JITTER_MS = 0;
 const RESULTS_POLL_MAX_BACKOFF_MS = 60_000;
 const SESSION_FINAL_FLUSH_LEAD_MS = 1_000;
 // Leave room below the server's 12 batches/minute ceiling for page-hide and
@@ -833,27 +832,32 @@ export function VoteArena({
       resultsPollTimer.current = undefined;
     }
 
-    function schedulePoll() {
+    // Subtract the previous request's own round-trip time from the next
+    // delay so request *start* times stay ~1s apart, instead of 1s plus
+    // however long the fetch took (which otherwise compounds every cycle).
+    function schedulePoll(previousRequestStartedAt?: number) {
       clearPoll();
       if (document.visibilityState !== "visible") return;
       const failures = resultsPollFailures.current;
       const delay = failures === 0
-        ? RESULTS_POLL_MIN_MS + Math.random() * RESULTS_POLL_JITTER_MS
+        ? Math.max(0, RESULTS_POLL_MIN_MS - (previousRequestStartedAt !== undefined ? performance.now() - previousRequestStartedAt : 0))
         : Math.min(RESULTS_POLL_MAX_BACKOFF_MS, RESULTS_POLL_MIN_MS * (2 ** failures));
 
       resultsPollTimer.current = window.setTimeout(async () => {
         if (document.visibilityState !== "visible") return;
+        const requestStartedAt = performance.now();
         const succeeded = await refreshResults(true);
         resultsPollFailures.current = succeeded ? 0 : Math.min(resultsPollFailures.current + 1, 4);
-        schedulePoll();
+        schedulePoll(requestStartedAt);
       }, delay);
     }
 
     function handleVisibilityChange() {
       if (document.visibilityState === "visible") {
+        const requestStartedAt = performance.now();
         void refreshResults(true).then((succeeded) => {
           resultsPollFailures.current = succeeded ? 0 : Math.min(resultsPollFailures.current + 1, 4);
-          schedulePoll();
+          schedulePoll(requestStartedAt);
         });
       } else {
         clearPoll();
