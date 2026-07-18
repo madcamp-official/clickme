@@ -1432,8 +1432,12 @@ export function VoteArena({
         <section aria-label="실시간 투표 현황" className="mb-6" data-analytics-section="scoreboard">
           <div className="flex overflow-hidden h-1 rounded-full bg-neutral-900">
             <span
-              className="h-full rounded-full km-score-bar"
+              className="h-full km-score-bar"
               style={{ width: `${dipPercentage}%`, backgroundColor: DISPLAY.dip.accent }}
+            />
+            <span
+              className="h-full km-score-bar"
+              style={{ width: `${pourPercentage}%`, backgroundColor: DISPLAY.pour.accent }}
             />
           </div>
           <div className="flex justify-between text-xs mt-2 km-score-labels">
