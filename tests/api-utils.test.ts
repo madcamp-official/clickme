@@ -205,6 +205,17 @@ describe("comment content filter", () => {
     expect(isCommentBodyAllowed("아 씨 발표 진짜 잘했다")).toBe(true);
   });
 
+  it("blocks the 시바/씨바 euphemistic misspelling and bare jamo abbreviations", () => {
+    expect(isCommentBodyAllowed("카리나 시바 개이쁨")).toBe(false);
+    expect(isCommentBodyAllowed("씨바 이게 뭐야")).toBe(false);
+    expect(isCommentBodyAllowed("ㅅㅂ 실화냐")).toBe(false);
+    expect(isCommentBodyAllowed("이런 ㅄ같은 소리를")).toBe(false);
+  });
+
+  it("does not flag 시바견 (Shiba Inu), an ordinary word containing a banned substring", () => {
+    expect(isCommentBodyAllowed("카리나가 시바견 닮아서 너무 귀여워요")).toBe(true);
+  });
+
   it("blocks links, emails, and phone numbers", () => {
     expect(isCommentBodyAllowed("여기 놀러와 https://example.com/promo")).toBe(false);
     expect(isCommentBodyAllowed("문의는 test@example.com 로 주세요")).toBe(false);
