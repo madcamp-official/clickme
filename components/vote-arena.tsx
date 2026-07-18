@@ -115,8 +115,8 @@ const FOOTER_EASTER_EGG_CLICKS = 10;
 const FOOTER_EASTER_EGG_WINDOW_MS = 5_000;
 const FOOTER_EASTER_EGG_ROUTE = "/api/next";
 const ACTIVE_INPUT_WINDOW_MS = 60_000;
-const RESULTS_POLL_MIN_MS = 4_000;
-const RESULTS_POLL_JITTER_MS = 2_000;
+const RESULTS_POLL_MIN_MS = 1_000;
+const RESULTS_POLL_JITTER_MS = 0;
 const RESULTS_POLL_MAX_BACKOFF_MS = 60_000;
 const SESSION_FINAL_FLUSH_LEAD_MS = 1_000;
 // Leave room below the server's 12 batches/minute ceiling for page-hide and
