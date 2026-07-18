@@ -55,6 +55,20 @@ map $cookie_clickme_session $clickme_session_limit_key {
     ""      $clickme_client_ip;
 }
 
+# /api/comments serves both a public GET read and a guarded POST mutation on
+# one path. limit_req/client_max_body_size cannot live inside `if`, so the
+# POST-only rate limits are scoped by giving GET an empty (uncounted) key
+# instead of branching with `if`.
+map $request_method $clickme_comments_post_ip {
+    POST    $clickme_client_ip;
+    default "";
+}
+
+map $request_method $clickme_comments_post_visitor {
+    POST    $clickme_visitor_limit_key;
+    default "";
+}
+
 # Do not put referral tokens, query strings, IPs, user agents, or referrers in
 # the access log. Rate-limit rejections are sampled at 1% to bound disk growth.
 map $uri $clickme_log_route {
@@ -88,6 +102,8 @@ limit_req_zone $clickme_visitor_limit_key zone=clickme_session_visitor:10m rate=
 limit_req_zone $clickme_session_limit_key zone=clickme_heartbeat:10m rate=6r/m;
 limit_req_zone $clickme_session_limit_key zone=clickme_events:10m rate=12r/m;
 limit_req_zone $clickme_visitor_limit_key zone=clickme_shares:10m rate=10r/m;
+limit_req_zone $clickme_comments_post_visitor zone=clickme_comments:10m rate=10r/m;
+limit_req_zone $clickme_comments_post_ip zone=clickme_comments_net:10m rate=60r/s;
 limit_req_zone $clickme_client_ip zone=clickme_public_read:10m rate=300r/m;
 
 proxy_cache_path /var/cache/nginx/clickme
@@ -204,12 +220,38 @@ server {
         proxy_pass http://clickme_next;
     }
 
-    # Comment functionality is intentionally retired at the edge. This never
-    # reaches Next.js or the database, for any HTTP method.
+    # Comments are live: GET is a public read (like /api/results), POST is a
+    # guarded mutation with the same Origin/Fetch Metadata/CSRF/session checks
+    # as vote and shares. nginx's `if` condition can only compare a single
+    # variable, so each guard is precomputed with `set` (which does support
+    # concatenation) into a value that is "POST0" only when the method is
+    # POST and that check failed -- since nginx also forbids nesting `if`
+    # inside `if`.
     location = /api/comments {
-        default_type application/json;
-        add_header Cache-Control "no-store" always;
-        return 410 '{"error":"댓글 기능이 종료되었습니다.","code":"COMMENTS_DISABLED"}';
+        if ($request_method !~ ^(?:GET|HEAD|POST)$) { return 405; }
+
+        set $clickme_comments_origin_check "$request_method$clickme_origin_ok";
+        set $clickme_comments_fetch_site_check "$request_method$clickme_fetch_site_ok";
+        set $clickme_comments_json_check "$request_method$clickme_json_ok";
+        set $clickme_comments_csrf_check "$request_method$clickme_csrf_present";
+        set $clickme_comments_session_check "$request_method$clickme_session_present";
+
+        if ($clickme_comments_origin_check = "POST0") { return 403; }
+        if ($clickme_comments_fetch_site_check = "POST0") { return 403; }
+        if ($clickme_comments_json_check = "POST0") { return 415; }
+        if ($clickme_comments_csrf_check = "POST0") { return 403; }
+        if ($clickme_comments_session_check = "POST0") { return 409; }
+
+        # client_max_body_size and limit_req cannot live inside `if`. GET/HEAD
+        # never send a body, so the POST cap is harmless left unconditional.
+        # The two comments-specific zones key on an empty (uncounted) string
+        # for non-POST methods, so GET is only bound by clickme_public_read.
+        client_max_body_size 4k;
+        limit_req zone=clickme_public_read burst=30 nodelay;
+        limit_req zone=clickme_comments_net burst=30 nodelay;
+        limit_req zone=clickme_comments burst=3 nodelay;
+
+        proxy_pass http://clickme_next;
     }
 
     # Keep the footer Easter egg out of the application process.

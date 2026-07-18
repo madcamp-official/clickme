@@ -196,7 +196,9 @@ Cloudflare Tunnel이 아닌 다른 reverse proxy를 앞에 추가하려면 이 I
 | `POST /api/shares` | visitor 10 req/min, body 4 KiB; 앱/DB가 일 50건 최종 제한 |
 | `GET /api/results` | public 300 req/min, 1초 cache, 5xx/timeout 시 stale, cache lock |
 | `/r/<token>` 및 share image | 22자 base64url 형식 선검사, public 300 req/min, 유효 image 1년 immutable cache |
-| `/api/comments` | 모든 method를 Nginx에서 고정 `410` 처리 |
+| `GET /api/comments` | public read, 다른 GET API와 동일한 public 300 req/min |
+| `POST /api/comments` | visitor 10 req/min, body 4 KiB; 앱/DB가 투표 필요·5분당 5건 최종 제한 |
+| `GET /api/topics/history` | 기타 API 정책과 동일 (명시적 location 없이 `/api/` 기본 규칙 적용) |
 | `/api/next` | 앱을 거치지 않는 `302 https://seojiny.com`, `no-referrer` |
 | 기타 API | body 4 KiB, GET/HEAD/POST 외 method 거절 |
 

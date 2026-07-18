@@ -94,12 +94,12 @@ assert_header() {
 log "checking home page"
 status="$(request GET / "$WORK_DIR/home.html" "$WORK_DIR/home.headers")"
 expect_status "$status" 200 "home page"
-grep -q '찍먹' "$WORK_DIR/home.html" || {
-  printf 'ERROR: home page does not contain 찍먹\n' >&2
+grep -q '카리나' "$WORK_DIR/home.html" || {
+  printf 'ERROR: home page does not contain 카리나\n' >&2
   exit 1
 }
-grep -q '부먹' "$WORK_DIR/home.html" || {
-  printf 'ERROR: home page does not contain 부먹\n' >&2
+grep -q '장원영' "$WORK_DIR/home.html" || {
+  printf 'ERROR: home page does not contain 장원영\n' >&2
   exit 1
 }
 
@@ -131,15 +131,22 @@ if tr -d '\r' < "$WORK_DIR/results.headers" | grep -Eiq '^set-cookie:'; then
   exit 1
 fi
 
-log "checking retired comments contract"
+log "checking public comments contract"
 status="$(request GET /api/comments "$WORK_DIR/comments-get.json" "$WORK_DIR/comments-get.headers")"
-expect_status "$status" 410 "GET comments endpoint"
+expect_status "$status" 200 "GET comments endpoint"
 assert_json "$WORK_DIR/comments-get.json" \
-  'value?.code === "COMMENTS_DISABLED"' \
-  'retired comments endpoint'
+  'Array.isArray(value?.comments)' \
+  'public comments endpoint'
 status="$(request POST /api/comments "$WORK_DIR/comments-post.json" "$WORK_DIR/comments-post.headers" \
   --header 'content-type: application/json' --data '{}')"
-expect_status "$status" 410 "POST comments endpoint"
+expect_status "$status" 403 "POST comments endpoint without Origin"
+
+log "checking public topic history contract"
+status="$(request GET /api/topics/history "$WORK_DIR/topics.json" "$WORK_DIR/topics.headers")"
+expect_status "$status" 200 "topic history endpoint"
+assert_json "$WORK_DIR/topics.json" \
+  'Array.isArray(value?.topics)' \
+  'public topic history endpoint'
 
 log "checking private readiness boundary"
 status="$(request GET /api/ready "$WORK_DIR/public-ready.json" "$WORK_DIR/public-ready.headers")"
