@@ -3,7 +3,9 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { CSSProperties, MouseEvent } from "react";
 
-import { TangsuyukArt } from "./tangsuyuk-art";
+import { motion } from "motion/react";
+
+import { ImageWithFallback } from "./image-with-fallback";
 
 type Choice = "dip" | "pour";
 type CampaignStatus = "active" | "protected" | "read_only";
@@ -83,18 +85,26 @@ type Burst = {
   delay: number;
 };
 
-const CHOICES = {
-  pour: {
-    label: "부먹",
-    defaultSlogan: "소스를 먼저 부어버려!",
-    slogans: ["소스가 배어야 진짜 맛!", "뿌려야 골고루지!", "찍먹은 소스 낭비야!", "부먹 = 인생의 진리"],
-    emojis: ["🍖", "😤", "💦", "🔥", "😎", "👑", "💪", "🫗"],
-  },
+const DISPLAY = {
   dip: {
-    label: "찍먹",
-    defaultSlogan: "필요할 때만 살짝 찍어!",
-    slogans: ["바삭함을 지켜라!", "내 스타일대로 찍어먹지!", "부먹은 소스 폭력이야!", "찍먹 = 진정한 식감"],
-    emojis: ["🥢", "😌", "✨", "🎯", "🧘", "💅", "🫙", "😏"],
+    label: "카리나",
+    eyebrow: "aespa",
+    photo: "/images/karina.jpg",
+    accent: "#60a5fa",
+    emoji: "💙",
+    defaultSlogan: "카리나 비주얼 실화냐",
+    slogans: ["카리나 웃음 치사량", "이 얼굴이 반칙이지", "카리나 없인 못 살아", "역시 카리나가 진리"],
+    burstTokens: ["💙", "✨", "aespa", "KARINA"],
+  },
+  pour: {
+    label: "장원영",
+    eyebrow: "IVE",
+    photo: "/images/wonyoung.jpg",
+    accent: "#f9a8d4",
+    emoji: "🌸",
+    defaultSlogan: "장원영 미소 치명적",
+    slogans: ["장원영 눈웃음 치사량", "이게 바로 원영적 사고", "장원영 없인 못 살아", "역시 장원영이 진리"],
+    burstTokens: ["🌸", "✨", "IVE", "WONYOUNG"],
   },
 } as const;
 
@@ -231,6 +241,37 @@ function isShareArtifact(value: unknown): value is ShareArtifact {
   );
 }
 
+type CommentEntry = {
+  id: string;
+  choice: Choice;
+  body: string;
+  createdAt: string;
+};
+
+type TopicHistoryEntry = {
+  id: string;
+  title: string;
+  optionALabel: string;
+  optionAChoice: Choice;
+  optionACount: number;
+  optionBLabel: string;
+  optionBChoice: Choice;
+  optionBCount: number;
+  startsAt: string | null;
+  endsAt: string | null;
+  archivedAt: string;
+};
+
+function isCommentsResponse(value: unknown): value is { comments: CommentEntry[] } {
+  if (!value || typeof value !== "object") return false;
+  return Array.isArray((value as { comments?: unknown }).comments);
+}
+
+function isTopicHistoryResponse(value: unknown): value is { topics: TopicHistoryEntry[] } {
+  if (!value || typeof value !== "object") return false;
+  return Array.isArray((value as { topics?: unknown }).topics);
+}
+
 function friendlyError(error: unknown): string {
   if (error instanceof ApiRequestError) {
     if (error.status === 429) return "요청이 너무 빨라요. 잠시만 기다린 뒤 다시 시도해 주세요.";
@@ -281,6 +322,10 @@ function isSharingOpen(status: CampaignStatus | undefined): boolean {
   return status === "active";
 }
 
+function isCommentsOpen(status: CampaignStatus | undefined): boolean {
+  return status === "active";
+}
+
 function isSessionBeforeDeadline(session: SessionContext): boolean {
   return performance.now() < session.deadlineMonotonic;
 }
@@ -304,7 +349,21 @@ async function copyText(value: string): Promise<void> {
 }
 
 function shareMessage(choice: Choice): string {
-  return `나는 ${CHOICES[choice].label}파! 당신의 선택은?`;
+  return `나는 ${DISPLAY[choice].label}파! 당신의 선택은?`;
+}
+
+function formatRelativeTime(iso: string): string {
+  const minutes = Math.floor((Date.now() - new Date(iso).getTime()) / 60_000);
+  if (minutes < 1) return "방금";
+  if (minutes < 60) return `${minutes}분 전`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours}시간 전`;
+  return `${Math.floor(hours / 24)}일 전`;
+}
+
+function formatArchivedDate(iso: string): string {
+  const date = new Date(iso);
+  return `${date.getFullYear()}.${String(date.getMonth() + 1).padStart(2, "0")}.${String(date.getDate()).padStart(2, "0")}`;
 }
 
 export function VoteArena({
@@ -331,6 +390,11 @@ export function VoteArena({
   const [loadError, setLoadError] = useState<string | null>(null);
   const [sessionError, setSessionError] = useState<string | null>(null);
   const [notice, setNotice] = useState<Notice | null>(null);
+  const [comments, setComments] = useState<CommentEntry[]>([]);
+  const [commentInput, setCommentInput] = useState("");
+  const [isCommentSubmitting, setIsCommentSubmitting] = useState(false);
+  const [topicHistory, setTopicHistory] = useState<TopicHistoryEntry[]>([]);
+  const [showPastTopics, setShowPastTopics] = useState(false);
 
   const burstId = useRef(0);
   const noticeTimer = useRef<number | undefined>(undefined);
@@ -795,6 +859,67 @@ export function VoteArena({
     };
   }, [isLoading, refreshResults]);
 
+  const refreshComments = useCallback(async () => {
+    try {
+      const response = await requestJson<unknown>("/api/comments");
+      if (isCommentsResponse(response)) setComments(response.comments);
+    } catch {
+      // Comments are non-critical; a failed refresh just keeps the last list.
+    }
+  }, []);
+
+  useEffect(() => {
+    const initialLoad = window.setTimeout(() => void refreshComments(), 0);
+    const interval = window.setInterval(() => {
+      if (document.visibilityState === "visible") void refreshComments();
+    }, 8_000);
+    return () => {
+      window.clearTimeout(initialLoad);
+      window.clearInterval(interval);
+    };
+  }, [refreshComments]);
+
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      try {
+        const response = await requestJson<unknown>("/api/topics/history");
+        if (!cancelled && isTopicHistoryResponse(response)) setTopicHistory(response.topics);
+      } catch {
+        // Past topics are non-critical; leave the section empty on failure.
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  async function submitComment() {
+    const text = commentInput.trim();
+    if (!text || !lastAcceptedChoice || isCommentSubmitting) return;
+    setIsCommentSubmitting(true);
+    try {
+      const activeSession = await initializeSession();
+      await requestJson<unknown>("/api/comments", {
+        method: "POST",
+        headers: { "X-Clickme-CSRF": activeSession.csrfToken },
+        body: JSON.stringify({
+          choice: lastAcceptedChoice,
+          requestId: createUuid(),
+          sessionId: activeSession.sessionId,
+          pageViewId: activeSession.pageViewId,
+          body: text,
+        }),
+      });
+      setCommentInput("");
+      void refreshComments();
+    } catch (error) {
+      showNotice({ tone: "error", message: friendlyError(error) });
+    } finally {
+      setIsCommentSubmitting(false);
+    }
+  }
+
   useEffect(() => {
     if (!session) return;
     window.clearTimeout(sessionRotationTimer.current);
@@ -1057,9 +1182,9 @@ export function VoteArena({
     const left = event.clientX > 0 ? ((event.clientX - rect.left) / rect.width) * 100 : 50;
     const top = event.clientY > 0 ? ((event.clientY - rect.top) / rect.height) * 100 : 50;
     const batchId = burstId.current;
-    burstId.current += CHOICES[choice].emojis.length;
+    burstId.current += DISPLAY[choice].burstTokens.length;
 
-    const nextBursts = CHOICES[choice].emojis.map((emoji, index) => ({
+    const nextBursts = DISPLAY[choice].burstTokens.map((emoji, index) => ({
       id: batchId + index,
       emoji,
       choice,
@@ -1185,7 +1310,7 @@ export function VoteArena({
     try {
       const { url, generated } = await resolveShareUrl();
       const shareData = {
-        title: "탕수육 부먹 vs 찍먹",
+        title: "카리나 vs 장원영",
         text: shareMessage(lastAcceptedChoice),
         url,
       };
@@ -1303,61 +1428,59 @@ export function VoteArena({
   const pourPercentage = totalCount === 0 ? 50 : 100 - dipPercentage;
   const canVote = Boolean(session && isVotingOpen(campaign?.status));
   const canShare = Boolean(lastAcceptedChoice && session && isSharingOpen(campaign?.status));
+  const canComment = Boolean(lastAcceptedChoice && session && isCommentsOpen(campaign?.status));
   const shareCta = session?.experimentVariant === "B" ? "친구에게 선택 물어보기" : "결과 공유하기";
   const campaignReadOnly = campaign && !isVotingOpen(campaign.status);
   const campaignUnavailableMessage = "지금은 투표를 받지 않고 결과만 보여 드려요.";
 
   return (
-    <main className="viral-shell">
-      <div aria-hidden="true" className="viral-scanlines" />
-      <section aria-labelledby="game-title" className="viral-game">
-        <p className="viral-badge">⚡ 오늘의 밸런스게임 ⚡</p>
-
+    <main
+      className="km-shell min-h-screen w-full bg-black overflow-x-hidden relative select-none"
+      style={{ fontFamily: "'Apple SD Gothic Neo', 'Malgun Gothic', sans-serif" }}
+    >
+      <div className="max-w-xl mx-auto px-4 py-10">
         {referralToken ? (
-          <aside className="viral-referral-banner" data-analytics-section="referral-banner">
+          <aside className="km-referral-banner" data-analytics-section="referral-banner">
             <span aria-hidden="true">🔥</span>
             <div>
               <strong>친구가 당신의 선택을 기다리고 있어요</strong>
-              <p>부먹과 찍먹, 어느 쪽인지 직접 보여 주세요!</p>
+              <p>카리나와 장원영, 어느 쪽인지 직접 보여 주세요!</p>
             </div>
           </aside>
         ) : null}
 
-        <header className="viral-heading">
-          <h1 id="game-title">탕수육</h1>
-          <p><strong>부먹</strong><span>vs</span><b>찍먹</b></p>
-          <small>* 여러 번 클릭 가능합니다 (진심을 담아서)</small>
-        </header>
+        <div className="text-center mb-8">
+          <p className="km-badge">⚡ 오늘의 밸런스게임 ⚡</p>
+          <h1 id="game-title" className="km-title">카리나 vs 장원영</h1>
+          <p className="km-subtitle">여러 번 클릭 가능 · 진심을 담아서</p>
+        </div>
 
-        <section aria-label="실시간 투표 현황" className="viral-scoreboard" data-analytics-section="scoreboard">
-          <div className="viral-score-track">
-            <span className="viral-score-pour" style={{ width: `${pourPercentage}%` }} />
-            <span className="viral-score-dip" style={{ width: `${dipPercentage}%` }} />
+        <section aria-label="실시간 투표 현황" className="mb-6" data-analytics-section="scoreboard">
+          <div className="flex overflow-hidden h-1 rounded-full bg-neutral-900">
+            <span
+              className="h-full rounded-full km-score-bar"
+              style={{ width: `${dipPercentage}%`, backgroundColor: DISPLAY.dip.accent }}
+            />
           </div>
-          <div className="viral-score-labels">
-            <p><b>부먹</b> {pourPercentage}% <small>({numberFormatter.format(pourCount)}표)</small></p>
-            <p><b>찍먹</b> {dipPercentage}% <small>({numberFormatter.format(dipCount)}표)</small></p>
+          <div className="flex justify-between text-xs mt-2 km-score-labels">
+            <span style={{ color: DISPLAY.dip.accent }}>
+              {DISPLAY.dip.label} {dipPercentage}% · {numberFormatter.format(dipCount)}표
+            </span>
+            <span className="km-total">총 {numberFormatter.format(totalCount)}명</span>
+            <span style={{ color: DISPLAY.pour.accent }}>
+              {DISPLAY.pour.label} {pourPercentage}% · {numberFormatter.format(pourCount)}표
+            </span>
           </div>
-          <p className="viral-total">총 <b>{numberFormatter.format(totalCount)}</b>명이 불타는 중 🔥</p>
         </section>
 
         {sessionError || loadError ? (
-          <p className="viral-inline-error" role="alert">{sessionError ?? loadError}</p>
+          <p className="km-inline-error" role="alert">{sessionError ?? loadError}</p>
         ) : null}
         {campaignReadOnly ? (
-          <p className="viral-campaign-state" role="status">{campaignUnavailableMessage}</p>
+          <p className="km-campaign-state" role="status">{campaignUnavailableMessage}</p>
         ) : null}
 
-        <div className="viral-choice-grid">
-          <VoteButton
-            choice="pour"
-            isSelected={lastChoice === "pour"}
-            isDisabled={isLoading || !canVote || isVoteInputLocked}
-            onVote={handleVote}
-            bursts={bursts.filter((burst) => burst.choice === "pour")}
-            sloganIndex={sloganIndex.pour}
-          />
-          <div aria-hidden="true" className="viral-versus">VS</div>
+        <div className="grid grid-cols-2 gap-3 mb-8">
           <VoteButton
             choice="dip"
             isSelected={lastChoice === "dip"}
@@ -1366,54 +1489,152 @@ export function VoteArena({
             bursts={bursts.filter((burst) => burst.choice === "dip")}
             sloganIndex={sloganIndex.dip}
           />
+          <VoteButton
+            choice="pour"
+            isSelected={lastChoice === "pour"}
+            isDisabled={isLoading || !canVote || isVoteInputLocked}
+            onVote={handleVote}
+            bursts={bursts.filter((burst) => burst.choice === "pour")}
+            sloganIndex={sloganIndex.pour}
+          />
         </div>
 
-        <p aria-live="polite" className="viral-click-status">
+        <p aria-live="polite" className="km-click-status text-center">
           {lastChoice
-            ? <>🔥 <b>{CHOICES[lastChoice].label}파로 등록됨!</b> (총 {clickCount}번 클릭){queuedVoteCount > 0 ? ` · ${queuedVoteCount}개 반영 대기 중` : ""}</>
+            ? (
+              <>
+                {DISPLAY[lastChoice].emoji} <b>{DISPLAY[lastChoice].label}파로 등록됨!</b>
+                <span className="km-click-count"> (총 {clickCount}번 클릭){queuedVoteCount > 0 ? ` · ${queuedVoteCount}개 반영 대기 중` : ""}</span>
+              </>
+            )
             : campaignReadOnly ? "현재 공개된 투표 결과예요." : "마음 가는 쪽을 계속 눌러 주세요!"}
         </p>
 
         {canShare && lastAcceptedChoice ? (
-          <section className={`viral-share-card viral-share-card--${lastAcceptedChoice}`} data-analytics-section="share-card">
-            <p className="viral-share-eyebrow">내 선택 결과</p>
-            <h2>나는 <strong>{CHOICES[lastAcceptedChoice].label}파!</strong></h2>
+          <section
+            className="km-share-card"
+            data-analytics-section="share-card"
+            style={{ borderColor: DISPLAY[lastAcceptedChoice].accent }}
+          >
+            <p className="km-share-eyebrow">내 선택 결과</p>
+            <h2>나는 <strong style={{ color: DISPLAY[lastAcceptedChoice].accent }}>{DISPLAY[lastAcceptedChoice].label}파!</strong></h2>
             <p>
-              지금 {CHOICES[lastAcceptedChoice].label}은 <b>{lastAcceptedChoice === "dip" ? dipPercentage : pourPercentage}%</b>
+              지금 {DISPLAY[lastAcceptedChoice].label}은 <b>{lastAcceptedChoice === "dip" ? dipPercentage : pourPercentage}%</b>
               {dipPercentage === pourPercentage
                 ? "로 팽팽해요."
                 : ` · ${Math.abs(dipPercentage - pourPercentage)}%p 차이예요.`}
             </p>
             <button
-              className="viral-share"
+              className="km-share"
               disabled={isShareLoading}
               onClick={() => void handleShare()}
               type="button"
             >
               {isShareLoading ? "도전 링크 만드는 중…" : shareCta} <span aria-hidden="true">↗</span>
             </button>
-            <div className="viral-share-actions">
+            <div className="km-share-actions">
               <button disabled={isShareLoading} onClick={() => void handleCopyLink()} type="button">링크 복사</button>
               <button disabled={isShareLoading} onClick={() => void handleDownloadImage()} type="button">결과 카드 저장</button>
             </div>
           </section>
         ) : null}
 
-        <footer>
+        <div className="km-divider" />
+
+        <section className="mb-10">
+          <h2 className="km-section-title">
+            익명 댓글 <span className="km-section-count">{comments.length}</span>
+          </h2>
+
+          <div className="flex gap-2 mb-5">
+            <input
+              type="text"
+              value={commentInput}
+              onChange={(event) => setCommentInput(event.target.value)}
+              onKeyDown={(event) => event.key === "Enter" && void submitComment()}
+              placeholder={canComment ? "익명으로 댓글 달기..." : "투표 후 댓글을 남길 수 있어요"}
+              maxLength={240}
+              disabled={!canComment || isCommentSubmitting}
+              className="km-comment-input"
+            />
+            <button
+              onClick={() => void submitComment()}
+              disabled={!canComment || isCommentSubmitting || commentInput.trim().length === 0}
+              className="km-comment-submit"
+              type="button"
+            >
+              등록
+            </button>
+          </div>
+
+          <div className="flex flex-col gap-3">
+            {comments.map((comment) => (
+              <div key={comment.id} className="flex items-start gap-3">
+                <span
+                  aria-hidden="true"
+                  className="km-comment-dot"
+                  style={{ backgroundColor: DISPLAY[comment.choice].accent }}
+                />
+                <div className="flex-1">
+                  <p className="km-comment-body">{comment.body}</p>
+                  <p className="km-comment-time">{formatRelativeTime(comment.createdAt)}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </section>
+
+        <div className="km-divider" />
+
+        <section className="mb-12">
+          <button
+            className="km-past-toggle"
+            onClick={() => setShowPastTopics((value) => !value)}
+            type="button"
+          >
+            <h2 className="km-section-title">이전 주제</h2>
+            <span className="km-past-toggle-hint">{showPastTopics ? "접기 ↑" : "펼치기 ↓"}</span>
+          </button>
+
+          {showPastTopics ? (
+            <div className="km-past-list">
+              {topicHistory.length === 0 ? (
+                <p className="km-past-empty">아직 이전 주제가 없어요.</p>
+              ) : topicHistory.map((topic) => {
+                const total = topic.optionACount + topic.optionBCount;
+                const pctA = total === 0 ? 50 : Math.round((topic.optionACount / total) * 100);
+                const pctB = 100 - pctA;
+                return (
+                  <div key={topic.id} className="km-past-item">
+                    <div>
+                      <p className="km-past-date">{formatArchivedDate(topic.archivedAt)}</p>
+                      <p className="km-past-title">{topic.title}</p>
+                    </div>
+                    <p className="km-past-result">
+                      {topic.optionALabel} {pctA}% · {topic.optionBLabel} {pctB}%
+                    </p>
+                  </div>
+                );
+              })}
+            </div>
+          ) : null}
+        </section>
+
+        <footer className="km-footer">
           <span onClick={handleFooterClick}>⚡ 오늘의 밸런스게임 · 투표는 계속됩니다 ⚡</span>
           <a href="/privacy">개인정보 처리 안내</a>
         </footer>
-      </section>
+      </div>
 
-      {notice ? <p className={`viral-toast viral-toast--${notice.tone}`} role="status">{notice.message}</p> : null}
+      {notice ? <p className={`km-toast km-toast--${notice.tone}`} role="status">{notice.message}</p> : null}
 
       {isVoteInputLocked ? (
-        <div className="viral-rate-limit-overlay">
+        <div className="km-rate-limit-overlay">
           <section
             aria-describedby="vote-rate-limit-description"
             aria-labelledby="vote-rate-limit-title"
             aria-modal="true"
-            className="viral-rate-limit-dialog"
+            className="km-rate-limit-dialog"
             onKeyDown={(event) => {
               if (event.key === "Tab") {
                 event.preventDefault();
@@ -1422,11 +1643,11 @@ export function VoteArena({
             }}
             role="alertdialog"
           >
-            <p aria-hidden="true" className="viral-rate-limit-icon">⚠️</p>
+            <p aria-hidden="true" className="km-rate-limit-icon">⚠️</p>
             <h2 id="vote-rate-limit-title">클릭이 너무 빠릅니다</h2>
             <p id="vote-rate-limit-description">한 번에 최대 30번까지만 반영할 수 있어요. 확인 후 다시 눌러 주세요.</p>
             <button
-              className="viral-rate-limit-confirm"
+              className="km-rate-limit-confirm"
               onClick={confirmRapidClickWarning}
               ref={rateLimitConfirmButton}
               type="button"
@@ -1455,32 +1676,47 @@ function VoteButton({
   bursts: Burst[];
   sloganIndex: number;
 }) {
-  const option = CHOICES[choice];
+  const option = DISPLAY[choice];
   const slogan = isSelected
     ? option.slogans[(sloganIndex - 1 + option.slogans.length) % option.slogans.length]
     : option.defaultSlogan;
 
   return (
-    <button
+    <motion.button
+      animate={isSelected ? { x: [0, -6, 6, -6, 6, 0] } : {}}
       aria-label={`${option.label}에 1표 더하기`}
-      className={`viral-choice viral-choice--${choice}${isSelected ? " is-selected" : ""}`}
+      className="km-choice relative overflow-hidden rounded-sm"
       data-analytics-section={`choice-${choice}`}
       disabled={isDisabled}
       onClick={(event) => onVote(choice, event)}
+      style={{
+        aspectRatio: "2/3",
+        outline: isSelected ? `2px solid ${option.accent}` : "2px solid transparent",
+        boxShadow: isSelected ? `0 0 24px ${option.accent}66` : "none",
+      }}
+      transition={{ duration: 0.25 }}
       type="button"
+      whileHover={isDisabled ? undefined : { scale: 1.02 }}
+      whileTap={isDisabled ? undefined : { scale: 0.97 }}
     >
-      <TangsuyukArt choice={choice} />
-      <span aria-hidden="true" className="viral-choice-overlay" />
-      <span className="viral-choice-content">
-        <strong>{option.label}</strong>
-        <small>{slogan}</small>
-        <em>계속 누르기!</em>
+      <ImageWithFallback
+        alt={option.label}
+        className="absolute inset-0 w-full h-full object-cover object-top"
+        src={option.photo}
+      />
+      <span aria-hidden="true" className="km-choice-overlay absolute inset-0" />
+      <span className="absolute bottom-0 left-0 right-0 p-4 text-left km-choice-content">
+        <span className="km-choice-eyebrow" style={{ color: option.accent }}>{option.eyebrow}</span>
+        <strong className="km-choice-label">{option.label}</strong>
+        <small className="km-choice-slogan">{slogan}</small>
       </span>
-      {isSelected ? <span className="viral-picked">내 선택!</span> : null}
-      <span aria-hidden="true" className="viral-bursts">
+      {isSelected ? (
+        <span className="km-picked" style={{ backgroundColor: option.accent }}>내 선택!</span>
+      ) : null}
+      <span aria-hidden="true" className="km-bursts">
         {bursts.map((burst) => (
           <i
-            className="viral-burst"
+            className="km-burst"
             key={burst.id}
             style={{
               "--burst-left": `${burst.left}%`,
@@ -1488,12 +1724,13 @@ function VoteButton({
               "--burst-drift": `${burst.drift}px`,
               "--burst-rotate": `${burst.rotate}deg`,
               animationDelay: `${burst.delay}ms`,
+              color: option.accent,
             } as CSSProperties}
           >
             {burst.emoji}
           </i>
         ))}
       </span>
-    </button>
+    </motion.button>
   );
 }

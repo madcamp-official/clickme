@@ -3,7 +3,7 @@ import { createHmac } from "node:crypto";
 import { NextRequest } from "next/server";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { GET as getComments, POST as postComments } from "../app/api/comments/route";
+import { POST as postComments } from "../app/api/comments/route";
 import { GET as getHealth } from "../app/api/health/route";
 import { GET as getNextRedirect } from "../app/api/next/route";
 import {
@@ -126,12 +126,43 @@ describe("outbound redirect", () => {
   });
 });
 
-describe("retired and public endpoints", () => {
-  it("keeps both comment methods permanently disabled", () => {
-    expect(getComments().status).toBe(410);
-    expect(postComments().status).toBe(410);
+describe("comments endpoint validation", () => {
+  it("rejects a malformed comment request before touching the database", async () => {
+    process.env.NEXT_PUBLIC_SITE_URL = "https://clickme.example";
+    const request = new NextRequest("https://clickme.example/api/comments", {
+      method: "POST",
+      headers: { "content-type": "application/json", origin: "https://clickme.example" },
+      body: JSON.stringify({
+        choice: "dip",
+        requestId: "not-a-uuid",
+        sessionId: "123e4567-e89b-42d3-a456-426614174001",
+        pageViewId: "123e4567-e89b-42d3-a456-426614174010",
+        body: "안녕하세요",
+      }),
+    });
+    const response = await postComments(request);
+    expect(response.status).toBe(400);
   });
 
+  it("rejects a comment body over 240 characters before touching the database", async () => {
+    process.env.NEXT_PUBLIC_SITE_URL = "https://clickme.example";
+    const request = new NextRequest("https://clickme.example/api/comments", {
+      method: "POST",
+      headers: { "content-type": "application/json", origin: "https://clickme.example" },
+      body: JSON.stringify({
+        choice: "dip",
+        requestId: "123e4567-e89b-42d3-a456-426614174099",
+        sessionId: "123e4567-e89b-42d3-a456-426614174001",
+        pageViewId: "123e4567-e89b-42d3-a456-426614174010",
+        body: "x".repeat(241),
+      }),
+    });
+    const response = await postComments(request);
+    expect(response.status).toBe(400);
+  });
+});
+
+describe("retired and public endpoints", () => {
   it("serves liveness without exposing a database state field", async () => {
     const response = getHealth();
     expect(response.status).toBe(200);

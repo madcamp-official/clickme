@@ -29,6 +29,35 @@ export type ApiError = {
   code?: string;
 };
 
+export type CommentEntry = {
+  id: string;
+  choice: Choice;
+  body: string;
+  createdAt: string;
+};
+
+export type CommentsResponse = {
+  comments: CommentEntry[];
+};
+
+export type TopicHistoryEntry = {
+  id: string;
+  title: string;
+  optionALabel: string;
+  optionAChoice: Choice;
+  optionACount: number;
+  optionBLabel: string;
+  optionBChoice: Choice;
+  optionBCount: number;
+  startsAt: string | null;
+  endsAt: string | null;
+  archivedAt: string;
+};
+
+export type TopicHistoryResponse = {
+  topics: TopicHistoryEntry[];
+};
+
 export function isChoice(value: unknown): value is Choice {
   return typeof value === "string" && CHOICES.includes(value as Choice);
 }

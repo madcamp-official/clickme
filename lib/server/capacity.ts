@@ -21,6 +21,9 @@ export const telemetryCapacity = new CapacityGate(12);
 export const shareCreateCapacity = new CapacityGate(4);
 export const shareResolveCapacity = new CapacityGate(16);
 export const shareImageCapacity = new CapacityGate(8);
+export const commentCapacity = new CapacityGate(12);
+export const commentReadCapacity = new CapacityGate(16);
+export const topicHistoryCapacity = new CapacityGate(8);
 const databaseCapacity = new CapacityGate(64);
 export const CRITICAL_DATABASE_RESERVE = 16;
 

@@ -502,24 +502,87 @@ export type Database = {
       comments: {
         Row: {
           id: string;
+          campaign_id: string;
+          session_id: string | null;
+          page_view_id: string | null;
+          request_id: string;
           visitor_hash: string;
+          network_hash: string;
           choice: Choice;
           body: string;
           created_at: string;
         };
         Insert: {
           id?: string;
+          campaign_id: string;
+          session_id?: string | null;
+          page_view_id?: string | null;
+          request_id: string;
           visitor_hash: string;
+          network_hash: string;
           choice: Choice;
           body: string;
           created_at?: string;
         };
         Update: {
           id?: string;
+          campaign_id?: string;
+          session_id?: string | null;
+          page_view_id?: string | null;
+          request_id?: string;
           visitor_hash?: string;
+          network_hash?: string;
           choice?: Choice;
           body?: string;
           created_at?: string;
+        };
+        Relationships: [];
+      };
+      topic_history: {
+        Row: {
+          id: string;
+          campaign_id: string;
+          title: string;
+          option_a_label: string;
+          option_a_choice: Choice;
+          option_a_count: number;
+          option_b_label: string;
+          option_b_choice: Choice;
+          option_b_count: number;
+          starts_at: string | null;
+          ends_at: string | null;
+          archived_at: string;
+          reason: string;
+        };
+        Insert: {
+          id?: string;
+          campaign_id: string;
+          title: string;
+          option_a_label: string;
+          option_a_choice: Choice;
+          option_a_count?: number;
+          option_b_label: string;
+          option_b_choice: Choice;
+          option_b_count?: number;
+          starts_at?: string | null;
+          ends_at?: string | null;
+          archived_at?: string;
+          reason: string;
+        };
+        Update: {
+          id?: string;
+          campaign_id?: string;
+          title?: string;
+          option_a_label?: string;
+          option_a_choice?: Choice;
+          option_a_count?: number;
+          option_b_label?: string;
+          option_b_choice?: Choice;
+          option_b_count?: number;
+          starts_at?: string | null;
+          ends_at?: string | null;
+          archived_at?: string;
+          reason?: string;
         };
         Relationships: [];
       };
@@ -678,6 +741,31 @@ export type Database = {
       };
     };
     Functions: {
+      archive_current_topic_and_reset: {
+        Args: {
+          p_title: string;
+          p_option_a_label: string;
+          p_option_a_choice: Choice;
+          p_option_b_label: string;
+          p_option_b_choice: Choice;
+          p_reason: string;
+        };
+        Returns: Array<{
+          id: string;
+          campaign_id: string;
+          title: string;
+          option_a_label: string;
+          option_a_choice: Choice;
+          option_a_count: number;
+          option_b_label: string;
+          option_b_choice: Choice;
+          option_b_count: number;
+          starts_at: string | null;
+          ends_at: string | null;
+          archived_at: string;
+          reason: string;
+        }>;
+      };
       bootstrap_daily_session: {
         Args: {
           p_visitor_hash: string;
@@ -798,6 +886,31 @@ export type Database = {
           user_choice: Choice | null;
         }>;
       };
+      list_public_comments: {
+        Args: { p_limit?: number };
+        Returns: Array<{
+          id: string;
+          choice: Choice;
+          body: string;
+          created_at: string;
+        }>;
+      };
+      list_public_topic_history: {
+        Args: { p_limit?: number };
+        Returns: Array<{
+          id: string;
+          title: string;
+          option_a_label: string;
+          option_a_choice: Choice;
+          option_a_count: number;
+          option_b_label: string;
+          option_b_choice: Choice;
+          option_b_count: number;
+          starts_at: string | null;
+          ends_at: string | null;
+          archived_at: string;
+        }>;
+      };
       record_analytics_events: {
         Args: {
           p_visitor_hash: string;
@@ -852,6 +965,22 @@ export type Database = {
           mode: CampaignMode;
           revision: number;
           updated_at: string;
+        }>;
+      };
+      submit_comment: {
+        Args: {
+          p_visitor_hash: string;
+          p_network_hash: string;
+          p_session_id: string;
+          p_page_view_id: string;
+          p_request_id: string;
+          p_choice: Choice;
+          p_body: string;
+        };
+        Returns: Array<{
+          comment_id: string;
+          accepted: boolean;
+          duplicate: boolean;
         }>;
       };
     };
