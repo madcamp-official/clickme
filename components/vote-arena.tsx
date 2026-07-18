@@ -352,6 +352,15 @@ function shareMessage(choice: Choice): string {
   return `나는 ${DISPLAY[choice].label}파! 당신의 선택은?`;
 }
 
+// Korean topic-marker particle (은/는): 은 follows a syllable with a final
+// consonant (받침), 는 follows one without. DISPLAY labels aren't fixed
+// strings, so this can't be hardcoded per choice.
+function topicParticle(word: string): "은" | "는" {
+  const code = word.codePointAt(word.length - 1) ?? 0;
+  if (code < 0xac00 || code > 0xd7a3) return "는";
+  return (code - 0xac00) % 28 === 0 ? "는" : "은";
+}
+
 function formatRelativeTime(iso: string): string {
   const minutes = Math.floor((Date.now() - new Date(iso).getTime()) / 60_000);
   if (minutes < 1) return "방금";
@@ -1497,7 +1506,7 @@ export function VoteArena({
             <p className="km-share-eyebrow">내 선택 결과</p>
             <h2>나는 <strong style={{ color: DISPLAY[lastAcceptedChoice].accent }}>{DISPLAY[lastAcceptedChoice].label}파!</strong></h2>
             <p>
-              지금 {DISPLAY[lastAcceptedChoice].label}은 <b>{lastAcceptedChoice === "dip" ? dipPercentage : pourPercentage}%</b>
+              지금 {DISPLAY[lastAcceptedChoice].label}{topicParticle(DISPLAY[lastAcceptedChoice].label)} <b>{lastAcceptedChoice === "dip" ? dipPercentage : pourPercentage}%</b>
               {dipPercentage === pourPercentage
                 ? "로 팽팽해요."
                 : ` · ${Math.abs(dipPercentage - pourPercentage)}%p 차이예요.`}
