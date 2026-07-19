@@ -6,10 +6,11 @@ import {
   BookOpen, Gift, SlidersHorizontal, Store,
   Users, ExternalLink, ChevronUp, Phone, ImagePlus, Trash2,
 } from "lucide-react";
-import mascots    from "@/imports/image.png";
 import nctWishChar from "@/imports/__.png";
 import nctWishLogo from "@/imports/image-1.png";
 import pixelScene  from "@/imports/image-2.png";
+import eventFinalJourney from "@/imports/event-final-journey.png";
+import guideNctWishBanner from "@/imports/guide-nct-wish-banner.png";
 import { ImageWithFallback } from "@/app/components/figma/ImageWithFallback";
 import {
   api,
@@ -2624,20 +2625,12 @@ function EventScreen({ onBack }: { onBack: () => void }) {
             <p className="mt-2 text-sm font-semibold text-gray-400">2026.07.16~2026.08.04</p>
           </div>
 
-          <div className="relative overflow-hidden bg-[#151419] px-5 pt-6 pb-5 text-white">
-            <span className="absolute top-4 left-5 text-white/70 text-xl select-none">✦</span>
-            <span className="absolute top-7 right-7 text-white/50 text-base select-none">✦</span>
-            <div className="relative z-10 text-center">
-              <p className="text-[10px] font-black tracking-wide text-white/75">MEGA MGC COFFEE × NCT WISH</p>
-              <p className="mt-5 font-black text-[11px] tracking-[0.12em] text-white/70">FIND MY WISH</p>
-              <h2 className="mt-1 text-2xl font-black leading-tight">THE FINAL<br />JOURNEY</h2>
-              <p className="mt-3 text-[11px] font-semibold text-white/70">NCT WISH 팬 사인회 프리퀀시 이벤트</p>
-            </div>
-            <div className="relative z-10 mt-5 rounded-2xl bg-white/10 px-4 py-3 text-center">
-              <p className="text-xs leading-relaxed text-white/85">
-                마침내 여섯 개의 별을 모두 찾아서<br />이제, 마지막 여정을 함께 떠나볼래?
-              </p>
-            </div>
+          <div className="overflow-hidden bg-[#151419]">
+            <ImageWithFallback
+              src={eventFinalJourney}
+              alt="NCT WISH 팬 사인회 프리퀀시 이벤트 - THE FINAL JOURNEY"
+              className="block h-auto w-full"
+            />
           </div>
 
           <div className="px-5 py-5 space-y-3">
@@ -3055,18 +3048,13 @@ function GuideScreen({ onBack }: { onBack: () => void }) {
           ))}
         </div>
 
-        {/* mascot illustration */}
-        <div className="relative mt-4 mx-4 mb-6 h-44 rounded-3xl overflow-hidden"
-          style={{ background: "linear-gradient(160deg, #EAE0FF 0%, #DDD5F8 100%)" }}>
-          <span className="absolute top-3 left-5 text-yellow-300 text-sm select-none">★</span>
-          <span className="absolute top-6 right-10 text-purple-300 text-xs select-none">✦</span>
-          <span className="absolute bottom-16 left-10 text-pink-200 text-xs select-none">✦</span>
-          <div className="absolute bottom-0 left-0 right-0 h-16 overflow-hidden opacity-50">
-            <ImageWithFallback src={pixelScene} alt="" className="w-full h-full object-cover object-bottom" />
-          </div>
-          <div className="absolute bottom-0 left-1/2 -translate-x-1/2 w-64">
-            <ImageWithFallback src={mascots} alt="마스코트" className="w-full object-contain" />
-          </div>
+        {/* bottom banner */}
+        <div className="mx-4 mb-6 mt-4 overflow-hidden rounded-3xl">
+          <ImageWithFallback
+            src={guideNctWishBanner}
+            alt="NCT WISH"
+            className="block h-auto w-full"
+          />
         </div>
       </div>
     </div>
