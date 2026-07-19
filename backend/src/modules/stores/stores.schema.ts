@@ -15,10 +15,14 @@ export const createStoreSchema = z.object({
   body: z
     .object({
       name: z.string().trim().min(1).max(100),
+      brand: z.string().trim().min(1).max(100).optional(),
       region: z.string().trim().min(1).max(100),
+      district: z.string().trim().min(1).max(100).nullable().optional(),
       address: z.string().trim().min(1).max(300),
+      phone: z.string().trim().min(1).max(30).nullable().optional(),
       latitude: z.number().min(-90).max(90).optional(),
-      longitude: z.number().min(-180).max(180).optional()
+      longitude: z.number().min(-180).max(180).optional(),
+      isActive: z.boolean().optional()
     })
     .strict()
 });

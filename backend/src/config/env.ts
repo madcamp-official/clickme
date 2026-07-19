@@ -2,6 +2,13 @@ import "dotenv/config";
 import { z } from "zod";
 
 const booleanString = z.enum(["true", "false"]).transform((value) => value === "true");
+const postgresUrl = z.url().refine(
+  (value) => {
+    const protocol = new URL(value).protocol;
+    return protocol === "postgres:" || protocol === "postgresql:";
+  },
+  { message: "유효한 PostgreSQL 연결 URL이어야 합니다." }
+);
 
 const envSchema = z
   .object({
@@ -11,14 +18,16 @@ const envSchema = z
       .enum(["fatal", "error", "warn", "info", "debug", "trace", "silent"])
       .default("info"),
     TRUST_PROXY: z.coerce.number().int().min(0).default(1),
-    DATABASE_URL: z.string().min(1),
-    DIRECT_URL: z.string().min(1),
+    DATABASE_URL: postgresUrl,
+    DIRECT_URL: postgresUrl,
     CORS_ORIGINS: z.string().min(1),
     KAKAO_REST_API_KEY: z.string().min(1),
     KAKAO_CLIENT_SECRET: z.string().min(1),
     KAKAO_REDIRECT_URI: z.url(),
     FRONTEND_AUTH_SUCCESS_URL: z.url(),
     FRONTEND_AUTH_FAILURE_URL: z.url(),
+    PUBLIC_BASE_URL: z.url().default("http://localhost:4000"),
+    UPLOAD_DIR: z.string().min(1).default("/tmp/wish-match-uploads"),
     JWT_ACCESS_SECRET: z.string().min(64),
     JWT_ACCESS_ISSUER: z.string().min(1).default("wish-match-api"),
     JWT_ACCESS_AUDIENCE: z.string().min(1).default("wish-match-web"),
@@ -54,6 +63,13 @@ const envSchema = z
         code: "custom",
         path: ["COOKIE_SECURE"],
         message: "운영 환경에서는 Secure cookie가 필수입니다."
+      });
+    }
+    if (value.NODE_ENV === "production" && !value.PUBLIC_BASE_URL.startsWith("https://")) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["PUBLIC_BASE_URL"],
+        message: "운영 환경의 PUBLIC_BASE_URL은 HTTPS여야 합니다."
       });
     }
   });

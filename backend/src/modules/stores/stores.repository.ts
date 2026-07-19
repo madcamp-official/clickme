@@ -9,7 +9,7 @@ export class StoresRepository {
         where,
         skip: (page - 1) * limit,
         take: limit,
-        orderBy: { name: "asc" }
+        orderBy: [{ region: "asc" }, { name: "asc" }]
       }),
       this.db.store.count({ where })
     ]);
@@ -23,5 +23,13 @@ export class StoresRepository {
   }
   update(id: string, data: Prisma.StoreUpdateInput) {
     return this.db.store.update({ where: { id }, data });
+  }
+  regionCounts() {
+    return this.db.store.groupBy({
+      by: ["region"],
+      where: { isActive: true },
+      _count: { _all: true },
+      orderBy: { region: "asc" }
+    });
   }
 }

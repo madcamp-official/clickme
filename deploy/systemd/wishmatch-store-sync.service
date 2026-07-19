@@ -1,0 +1,19 @@
+[Unit]
+Description=Synchronize official Mega MGC Coffee stores for WISH MATCH
+Wants=network-online.target
+Requires=postgresql.service
+After=network-online.target postgresql.service
+
+[Service]
+Type=oneshot
+WorkingDirectory=/root/clickme/backend
+EnvironmentFile=/root/clickme/backend/.env
+ExecStart=/usr/bin/npm run stores:sync
+TimeoutStartSec=10min
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=read-only
+UMask=0077
+StandardOutput=journal
+StandardError=journal

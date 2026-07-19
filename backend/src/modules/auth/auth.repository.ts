@@ -14,12 +14,11 @@ export class AuthRepository {
     return this.db.user.create({ data });
   }
 
-  updateLogin(userId: string, profileImage: string | undefined, makeAdmin: boolean): Promise<User> {
+  updateLogin(userId: string, makeAdmin: boolean): Promise<User> {
     return this.db.user.update({
       where: { id: userId },
       data: {
         lastLoginAt: new Date(),
-        ...(profileImage ? { profileImage } : {}),
         ...(makeAdmin ? { role: "ADMIN" } : {})
       }
     });

@@ -55,9 +55,10 @@ describe("AuthService", () => {
 
   it("blocks a suspended existing user", async () => {
     const suspended = user({ status: "SUSPENDED" });
+    const updateLogin = vi.fn().mockResolvedValue(suspended);
     const repository = {
       findUserByKakaoId: vi.fn().mockResolvedValue(suspended),
-      updateLogin: vi.fn().mockResolvedValue(suspended)
+      updateLogin
     } as unknown as AuthRepository;
     const kakao = {
       exchangeCode: vi.fn().mockResolvedValue("temporary-token"),
@@ -66,6 +67,7 @@ describe("AuthService", () => {
     await expect(new AuthService(repository, kakao).kakaoLogin("code")).rejects.toMatchObject({
       code: "USER_SUSPENDED"
     });
+    expect(updateLogin).toHaveBeenCalledWith("user-1", false);
   });
 
   it("rotates a valid refresh session and rejects a revoked one", async () => {

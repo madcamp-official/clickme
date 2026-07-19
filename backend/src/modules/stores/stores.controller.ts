@@ -20,4 +20,7 @@ export class StoresController {
   get = async (req: Request, res: Response): Promise<void> => {
     res.json(ok(await this.service.get(req.params.id as string)));
   };
+  regions = async (_req: Request, res: Response): Promise<void> => {
+    res.json(ok(await this.service.regions()));
+  };
 }

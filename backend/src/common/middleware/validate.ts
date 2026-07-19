@@ -20,7 +20,16 @@ export const validate =
     }
     const validated = result.data as { body?: unknown; query?: unknown; params?: unknown };
     if (validated.body !== undefined) req.body = validated.body;
-    if (validated.query !== undefined) req.query = validated.query as typeof req.query;
+    if (validated.query !== undefined) {
+      // Express 5 exposes req.query through a getter without a setter. Define an
+      // own property so controllers receive Zod's coerced/defaulted query values.
+      Object.defineProperty(req, "query", {
+        value: validated.query,
+        writable: true,
+        enumerable: true,
+        configurable: true
+      });
+    }
     if (validated.params !== undefined) req.params = validated.params as typeof req.params;
     next();
   };

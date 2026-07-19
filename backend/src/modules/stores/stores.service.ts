@@ -7,12 +7,14 @@ export class StoresService {
   constructor(private readonly repository = new StoresRepository()) {}
   async list(input: { region?: string; keyword?: string; page: number; limit: number }) {
     const where: Prisma.StoreWhereInput = {
+      isActive: true,
       ...(input.region ? { region: { equals: input.region, mode: "insensitive" } } : {}),
       ...(input.keyword
         ? {
             OR: [
               { name: { contains: input.keyword, mode: "insensitive" } },
-              { address: { contains: input.keyword, mode: "insensitive" } }
+              { address: { contains: input.keyword, mode: "insensitive" } },
+              { district: { contains: input.keyword, mode: "insensitive" } }
             ]
           }
         : {})
@@ -31,5 +33,9 @@ export class StoresService {
   async update(id: string, data: Prisma.StoreUpdateInput) {
     await this.get(id);
     return this.repository.update(id, data);
+  }
+  async regions() {
+    const regions = await this.repository.regionCounts();
+    return regions.map((item) => ({ region: item.region, count: item._count._all }));
   }
 }

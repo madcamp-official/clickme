@@ -12,6 +12,9 @@ function fromPrisma(error: Prisma.PrismaClientKnownRequestError): AppError {
     if (model === "Review") {
       return new AppError("REVIEW_ALREADY_EXISTS", "이미 후기를 작성했습니다.", 409);
     }
+    if (model === "Participation") {
+      return new AppError("PARTICIPATION_ALREADY_EXISTS", "이미 참여한 모집입니다.", 409);
+    }
     if (model === "Report") {
       return new AppError("REPORT_ALREADY_EXISTS", "이미 같은 사유로 신고했습니다.", 409);
     }

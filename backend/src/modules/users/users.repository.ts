@@ -10,6 +10,12 @@ const publicUserSelect = {
   createdAt: true
 } satisfies Prisma.UserSelect;
 
+const postInclude = {
+  writer: { select: publicUserSelect },
+  store: true,
+  event: { select: { id: true, title: true } }
+} satisfies Prisma.PostInclude;
+
 export class UsersRepository {
   constructor(private readonly db: PrismaClient = prisma) {}
 
@@ -25,6 +31,10 @@ export class UsersRepository {
     return this.db.user.update({ where: { id }, data: { nickname }, select: publicUserSelect });
   }
 
+  updateProfileImage(id: string, profileImage: string | null) {
+    return this.db.user.update({ where: { id }, data: { profileImage }, select: publicUserSelect });
+  }
+
   async posts(userId: string, page: number, limit: number) {
     const where: Prisma.PostWhereInput = { writerId: userId, deletedAt: null };
     const [items, total] = await Promise.all([
@@ -33,7 +43,23 @@ export class UsersRepository {
         skip: (page - 1) * limit,
         take: limit,
         orderBy: { createdAt: "desc" },
-        omit: { openChatUrl: true }
+        omit: { openChatUrl: true },
+        include: postInclude
+      }),
+      this.db.post.count({ where })
+    ]);
+    return { items, total };
+  }
+
+  async myPosts(userId: string, page: number, limit: number) {
+    const where: Prisma.PostWhereInput = { writerId: userId, deletedAt: null };
+    const [items, total] = await Promise.all([
+      this.db.post.findMany({
+        where,
+        skip: (page - 1) * limit,
+        take: limit,
+        orderBy: { createdAt: "desc" },
+        include: postInclude
       }),
       this.db.post.count({ where })
     ]);

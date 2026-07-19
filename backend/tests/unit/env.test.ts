@@ -12,6 +12,8 @@ const valid = (): NodeJS.ProcessEnv => ({
   KAKAO_REDIRECT_URI: "http://localhost:4000/api/v1/auth/kakao/callback",
   FRONTEND_AUTH_SUCCESS_URL: "http://localhost:3000/success",
   FRONTEND_AUTH_FAILURE_URL: "http://localhost:3000/failure",
+  PUBLIC_BASE_URL: "http://localhost:4000",
+  UPLOAD_DIR: "/tmp/wish-match-test-uploads",
   JWT_ACCESS_SECRET: "x".repeat(64),
   COOKIE_SECRET: "y".repeat(32),
   COOKIE_SECURE: "false",
@@ -24,6 +26,10 @@ describe("environment validation", () => {
   });
   it("requires secure cookies with SameSite=None", () => {
     expect(() => parseEnv({ ...valid(), COOKIE_SAME_SITE: "none" })).toThrow();
+  });
+  it("rejects missing or non-PostgreSQL database URLs", () => {
+    expect(() => parseEnv({ ...valid(), DATABASE_URL: "your-database-url" })).toThrow();
+    expect(() => parseEnv({ ...valid(), DIRECT_URL: "https://example.com/database" })).toThrow();
   });
   it("parses explicit origins and admin Kakao IDs", () => {
     const env = parseEnv({

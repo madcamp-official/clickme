@@ -6,6 +6,7 @@ info:
     NCT WISH 프리퀀시 공동구매 매칭 API입니다. 인증은 Kakao OAuth만 지원하며
     이메일 signup/login/password-reset API는 제공하지 않습니다.
 servers:
+  - url: https://wishmatch.madcamp-kaist.org
   - url: http://localhost:4000
 tags:
   - name: Auth
@@ -15,10 +16,32 @@ tags:
   - name: Posts
   - name: Reviews
   - name: Favorites
+  - name: Participations
+  - name: PurchaseRequests
+  - name: Inquiries
   - name: Reports
   - name: Admin
   - name: Health
 paths:
+  /api/v1/inquiries:
+    get:
+      tags: [Inquiries]
+      summary: 내 문의 목록
+      security: [{ bearerAuth: [] }, { accessCookie: [] }]
+      parameters:
+        - { $ref: "#/components/parameters/Page" }
+        - { $ref: "#/components/parameters/Limit" }
+      responses: { "200": { $ref: "#/components/responses/List" } }
+    post:
+      tags: [Inquiries]
+      summary: 문의 접수
+      security: [{ bearerAuth: [] }, { accessCookie: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/InquiryCreate" }
+      responses: { "201": { $ref: "#/components/responses/Success" } }
   /api/v1/health:
     get:
       tags: [Health]
@@ -91,12 +114,49 @@ paths:
       responses:
         "200": { $ref: "#/components/responses/Success" }
         "409": { $ref: "#/components/responses/Error" }
+  /api/v1/users/me/profile-image:
+    put:
+      tags: [Users]
+      summary: 내 프로필 이미지 등록 또는 교체
+      description: 브라우저에서 정사각형으로 축소한 JPEG, PNG 또는 WebP data URL을 저장합니다.
+      security: [{ bearerAuth: [] }, { accessCookie: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [imageData]
+              properties:
+                imageData:
+                  type: string
+                  maxLength: 95000
+                  pattern: '^data:image/(?:jpeg|png|webp);base64,[A-Za-z0-9+/=]+$'
+      responses:
+        "200": { $ref: "#/components/responses/Success" }
+        "400": { $ref: "#/components/responses/Error" }
+    delete:
+      tags: [Users]
+      summary: 내 프로필 이미지를 기본 이미지로 변경
+      security: [{ bearerAuth: [] }, { accessCookie: [] }]
+      responses:
+        "200": { $ref: "#/components/responses/Success" }
   /api/v1/users/{id}/posts:
     get:
       tags: [Users]
       summary: 사용자 작성글
       parameters:
         - { $ref: "#/components/parameters/Id" }
+        - { $ref: "#/components/parameters/Page" }
+        - { $ref: "#/components/parameters/Limit" }
+      responses: { "200": { $ref: "#/components/responses/List" } }
+  /api/v1/users/me/posts:
+    get:
+      tags: [Users]
+      summary: 내가 작성한 모집글 (오픈채팅 URL 포함)
+      security: [{ bearerAuth: [] }, { accessCookie: [] }]
+      parameters:
         - { $ref: "#/components/parameters/Page" }
         - { $ref: "#/components/parameters/Limit" }
       responses: { "200": { $ref: "#/components/responses/List" } }
@@ -119,6 +179,11 @@ paths:
         - { $ref: "#/components/parameters/Page" }
         - { $ref: "#/components/parameters/Limit" }
       responses: { "200": { $ref: "#/components/responses/List" } }
+  /api/v1/stores/regions:
+    get:
+      tags: [Stores]
+      summary: 활성 공식 매장의 지역별 개수
+      responses: { "200": { $ref: "#/components/responses/Success" } }
   /api/v1/stores/{id}:
     get:
       tags: [Stores]
@@ -250,6 +315,15 @@ paths:
         - { $ref: "#/components/parameters/Page" }
         - { $ref: "#/components/parameters/Limit" }
       responses: { "200": { $ref: "#/components/responses/List" } }
+  /api/v1/reviews/me:
+    get:
+      tags: [Reviews]
+      summary: 내가 작성한 후기
+      security: [{ bearerAuth: [] }, { accessCookie: [] }]
+      parameters:
+        - { $ref: "#/components/parameters/Page" }
+        - { $ref: "#/components/parameters/Limit" }
+      responses: { "200": { $ref: "#/components/responses/List" } }
   /api/v1/posts/{postId}/favorite:
     post:
       tags: [Favorites]
@@ -272,6 +346,82 @@ paths:
         - { $ref: "#/components/parameters/Page" }
         - { $ref: "#/components/parameters/Limit" }
       responses: { "200": { $ref: "#/components/responses/List" } }
+  /api/v1/posts/{postId}/participations:
+    post:
+      tags: [Participations]
+      summary: 모집 참여 및 남은 수량 예약
+      description: 사용자당 모집글 하나에 한 번만 참여할 수 있으며 수량 차감과 참여 저장은 원자적으로 처리됩니다.
+      security: [{ bearerAuth: [] }, { accessCookie: [] }]
+      parameters: [{ $ref: "#/components/parameters/PostId" }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ParticipationCreate" }
+      responses:
+        "201": { $ref: "#/components/responses/Success" }
+        "409": { $ref: "#/components/responses/Error" }
+  /api/v1/participations/me:
+    get:
+      tags: [Participations]
+      summary: 내 참여 목록
+      security: [{ bearerAuth: [] }, { accessCookie: [] }]
+      parameters:
+        - { $ref: "#/components/parameters/Page" }
+        - { $ref: "#/components/parameters/Limit" }
+      responses: { "200": { $ref: "#/components/responses/List" } }
+  /api/v1/participations/{id}:
+    delete:
+      tags: [Participations]
+      summary: 참여 취소 및 수량 복원
+      security: [{ bearerAuth: [] }, { accessCookie: [] }]
+      parameters: [{ $ref: "#/components/parameters/Id" }]
+      responses: { "200": { $ref: "#/components/responses/Success" } }
+  /api/v1/purchase-requests:
+    get:
+      tags: [PurchaseRequests]
+      summary: 구매 요청 목록
+      description: 목록에서는 오픈채팅 URL을 노출하지 않습니다.
+      security: [{ bearerAuth: [] }, { accessCookie: [] }]
+      parameters:
+        - { name: status, in: query, schema: { type: string, enum: [OPEN, ACCEPTED, CANCELLED] } }
+        - { name: city, in: query, schema: { type: string } }
+        - { $ref: "#/components/parameters/Page" }
+        - { $ref: "#/components/parameters/Limit" }
+      responses: { "200": { $ref: "#/components/responses/List" } }
+    post:
+      tags: [PurchaseRequests]
+      summary: 구매 요청 작성
+      security: [{ bearerAuth: [] }, { accessCookie: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/PurchaseRequestCreate" }
+      responses: { "201": { $ref: "#/components/responses/Success" } }
+  /api/v1/purchase-requests/{id}:
+    get:
+      tags: [PurchaseRequests]
+      summary: 구매 요청 상세
+      description: 오픈채팅 URL은 요청자 또는 수락자에게만 노출됩니다.
+      security: [{ bearerAuth: [] }, { accessCookie: [] }]
+      parameters: [{ $ref: "#/components/parameters/Id" }]
+      responses: { "200": { $ref: "#/components/responses/Success" } }
+    delete:
+      tags: [PurchaseRequests]
+      summary: 구매 요청 취소
+      security: [{ bearerAuth: [] }, { accessCookie: [] }]
+      parameters: [{ $ref: "#/components/parameters/Id" }]
+      responses: { "200": { $ref: "#/components/responses/Success" } }
+  /api/v1/purchase-requests/{id}/accept:
+    post:
+      tags: [PurchaseRequests]
+      summary: 구매 요청 수락
+      security: [{ bearerAuth: [] }, { accessCookie: [] }]
+      parameters: [{ $ref: "#/components/parameters/Id" }]
+      responses:
+        "200": { $ref: "#/components/responses/Success" }
+        "409": { $ref: "#/components/responses/Error" }
   /api/v1/reports:
     post:
       tags: [Reports]
@@ -477,10 +627,16 @@ components:
         totalCount: { type: integer, minimum: 1, maximum: 100 }
         remainCount: { type: integer, minimum: 0, maximum: 100 }
         meetingTime: { type: string, format: date-time }
+        availableUntil: { type: string, format: date-time }
         meetingPlace: { type: string, minLength: 1, maxLength: 300 }
         openChatUrl: { type: string, format: uri, pattern: '^https://open\\.kakao\\.com/' }
         description: { type: [string, "null"], maxLength: 2000 }
         imageUrl: { type: [string, "null"], format: uri }
+        imageData:
+          type: string
+          maxLength: 430000
+          pattern: '^data:image/(jpeg|png|webp);base64,'
+          description: 브라우저에서 압축한 대표 사진 data URL. imageUrl과 동시에 지정할 수 없습니다.
     ReviewCreate:
       type: object
       additionalProperties: false
@@ -488,7 +644,33 @@ components:
       properties:
         postId: { type: string }
         rating: { type: integer, minimum: 1, maximum: 5 }
-        content: { type: string, minLength: 1, maxLength: 500 }
+        content: { type: string, minLength: 10, maxLength: 500 }
+    ParticipationCreate:
+      type: object
+      additionalProperties: false
+      required: [quantity, pickupStore]
+      properties:
+        quantity: { type: integer, minimum: 1, maximum: 30 }
+        pickupStore: { type: string, minLength: 1, maxLength: 100 }
+    PurchaseRequestCreate:
+      type: object
+      additionalProperties: false
+      required: [city, branch, menu, quantity, desiredTime, openChatUrl]
+      properties:
+        city: { type: string, minLength: 1, maxLength: 50 }
+        branch: { type: string, minLength: 1, maxLength: 100 }
+        menu: { type: string, minLength: 1, maxLength: 200 }
+        quantity: { type: integer, minimum: 1, maximum: 30 }
+        desiredTime: { type: string, minLength: 1, maxLength: 100 }
+        note: { type: [string, "null"], maxLength: 500 }
+        openChatUrl: { type: string, format: uri, pattern: '^https://open\\.kakao\\.com/' }
+    InquiryCreate:
+      type: object
+      additionalProperties: false
+      required: [category, content]
+      properties:
+        category: { type: string, enum: [SERVICE, ACCOUNT, MODERATION, PAYMENT, OTHER] }
+        content: { type: string, minLength: 10, maxLength: 500 }
     ReportCreate:
       type: object
       additionalProperties: false
@@ -501,11 +683,15 @@ components:
       type: object
       additionalProperties: false
       properties:
+        brand: { type: string, minLength: 1, maxLength: 100 }
         name: { type: string, minLength: 1, maxLength: 100 }
         region: { type: string, minLength: 1, maxLength: 100 }
+        district: { type: [string, "null"], minLength: 1, maxLength: 100 }
         address: { type: string, minLength: 1, maxLength: 300 }
+        phone: { type: [string, "null"], minLength: 1, maxLength: 30 }
         latitude: { type: number, minimum: -90, maximum: 90 }
         longitude: { type: number, minimum: -180, maximum: 180 }
+        isActive: { type: boolean }
     EventInput:
       type: object
       additionalProperties: false

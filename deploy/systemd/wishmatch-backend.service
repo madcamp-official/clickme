@@ -1,0 +1,26 @@
+[Unit]
+Description=WISH MATCH backend API
+Wants=network-online.target
+Requires=postgresql.service
+After=network-online.target postgresql.service
+
+[Service]
+Type=simple
+WorkingDirectory=/root/clickme/backend
+EnvironmentFile=/root/clickme/backend/.env
+ExecStart=/usr/bin/node /root/clickme/backend/dist/server.js
+Restart=on-failure
+RestartSec=3s
+TimeoutStopSec=15s
+KillSignal=SIGTERM
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=/var/lib/wishmatch/uploads
+UMask=0077
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

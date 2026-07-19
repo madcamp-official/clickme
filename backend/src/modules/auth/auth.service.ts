@@ -90,7 +90,9 @@ export class AuthService {
     if (!user) {
       user = await this.createUniqueUser({ ...profile, kakaoUserId, makeAdmin });
     } else {
-      user = await this.repository.updateLogin(user.id, profile.profileImage, makeAdmin);
+      // Kakao 프로필은 최초 가입 시에만 기본값으로 사용합니다. 이후에는 사용자가
+      // 서비스에서 선택하거나 삭제한 프로필 사진을 다시 로그인해도 보존합니다.
+      user = await this.repository.updateLogin(user.id, makeAdmin);
     }
     if (user.status === UserStatus.SUSPENDED || user.deletedAt) {
       throw new AppError("USER_SUSPENDED", "이용이 정지된 사용자입니다.", 403);

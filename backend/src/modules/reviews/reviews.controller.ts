@@ -19,4 +19,15 @@ export class ReviewsController {
       )
     );
   };
+  myReviews = async (req: Request, res: Response): Promise<void> => {
+    res.json(
+      ok(
+        await this.service.myReviews(
+          req.auth!.userId,
+          Number(req.query.page),
+          Number(req.query.limit)
+        )
+      )
+    );
+  };
 }

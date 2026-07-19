@@ -1,11 +1,34 @@
+# WISH MATCH Frontend
 
-  # Matching platform prototype
+Vite, React, TypeScript 기반의 WISH MATCH 웹 클라이언트입니다. 카카오 로그인과 모집·찜·참여·후기·신고·구매 요청·프로필 흐름을 `backend/` REST API와 연결합니다.
 
-  This is a code bundle for Matching platform prototype. The original project is available at https://www.figma.com/design/eEKkLepZh1fWONCwuE10j6/Matching-platform-prototype.
+## 로컬 실행
 
-  ## Running the code
+백엔드를 먼저 `http://localhost:4000`에서 실행한 다음 프론트를 시작합니다.
 
-  Run `npm i` to install the dependencies.
+```bash
+cd frontend
+cp .env.example .env
+npm install
+npm run dev
+```
 
-  Run `npm run dev` to start the development server.
-  
+개발 서버는 기본적으로 `http://localhost:5173`이며 `/api` 요청을 `http://localhost:4000`으로 프록시합니다. `VITE_API_BASE_URL`을 비워두면 이 same-origin 프록시를 사용합니다.
+
+## 환경변수
+
+- `VITE_API_BASE_URL`: 운영에서 사용할 백엔드 origin. 예: `https://api.example.com`. 로컬 개발에서는 빈 값 권장.
+
+카카오 OAuth 성공/실패 리다이렉트는 각각 `/auth/callback/success`, `/auth/callback/failure`이며 Vite 또는 배포 호스트가 SPA fallback을 제공해야 합니다.
+
+홈의 공식 매장찾기와 모집 작성의 매장 선택기는 백엔드의 실제 메가MGC커피 매장 데이터를 사용합니다. 지역별 개수, 매장명·시군구·주소 검색, 전화 및 카카오맵 연결을 제공합니다.
+
+## 품질 검사
+
+```bash
+npm run typecheck
+npm run build
+npm run check
+```
+
+모집 대표 사진은 현재 외부 HTTPS 이미지 URL을 사용합니다. 프로필 사진은 브라우저에서 정사각형으로 자르고 용량을 줄인 뒤 전용 백엔드 API로 업로드하며, 마이페이지에서 기본 이미지로 되돌릴 수 있습니다.

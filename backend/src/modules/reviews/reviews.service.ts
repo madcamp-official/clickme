@@ -16,6 +16,13 @@ export class ReviewsService {
         "자기 자신에게 후기를 작성할 수 없습니다.",
         400
       );
+    const participation = await this.repository.findParticipation(writerId, input.postId);
+    if (!participation || participation.status !== "CONFIRMED")
+      throw new AppError(
+        "PARTICIPATION_REQUIRED",
+        "해당 모집에 참여한 사용자만 후기를 작성할 수 있습니다.",
+        403
+      );
     if (await this.repository.findExisting(writerId, input.postId)) {
       throw new AppError("REVIEW_ALREADY_EXISTS", "이미 후기를 작성했습니다.", 409);
     }
@@ -23,6 +30,10 @@ export class ReviewsService {
   }
   async list(userId: string, page: number, limit: number) {
     const result = await this.repository.list(userId, page, limit);
+    return { items: result.items, pagination: toPagination(page, limit, result.total) };
+  }
+  async myReviews(userId: string, page: number, limit: number) {
+    const result = await this.repository.listWritten(userId, page, limit);
     return { items: result.items, pagination: toPagination(page, limit, result.total) };
   }
 }

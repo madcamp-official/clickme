@@ -1,0 +1,11 @@
+[Unit]
+Description=Weekly official Mega MGC Coffee store synchronization
+
+[Timer]
+OnCalendar=Sun *-*-* 18:00:00 UTC
+RandomizedDelaySec=30min
+Persistent=true
+Unit=wishmatch-store-sync.service
+
+[Install]
+WantedBy=timers.target
