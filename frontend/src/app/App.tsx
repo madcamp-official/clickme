@@ -547,7 +547,7 @@ function RequestDetailScreen({ request, canAccept, canCancel, onBack, onAccept, 
         {/* details */}
         <div className="bg-[#F8F6FF] rounded-2xl p-4 space-y-3">
           <div className="flex justify-between text-sm">
-            <span className="text-gray-400">희망 지역/지점</span>
+            <span className="text-gray-400">희망 매장</span>
             <span className="font-bold text-gray-800">{request.city} · {request.branch}</span>
           </div>
           <div className="flex justify-between text-sm">
@@ -608,12 +608,26 @@ function RequestDetailScreen({ request, canAccept, canCancel, onBack, onAccept, 
   );
 }
 
-function RequestPostScreen({ onBack, onSubmit }: {
+const REQUEST_MENU_OPTIONS = [
+  "저당 꿀배 XO야쿠르트",
+  "골드망고 스무디",
+  "초코허니 퐁크러쉬",
+  "밀크쉐이크",
+  "메가베리 아사이볼",
+  "망고요거트 스무디",
+  "제로 부스트 에이드",
+  "메가리카노",
+  "코코넛 커피 스무디",
+  "흑당 밀크티 라떼",
+] as const;
+
+function RequestPostScreen({ onBack, stores, onSubmit }: {
   onBack: () => void;
+  stores: ApiStore[];
   onSubmit: (req: Omit<BuyRequest, "id" | "requester" | "status" | "createdAt">) => Promise<void>;
 }) {
-  const [city,        setCity]        = useState("");
-  const [branch,      setBranch]      = useState("");
+  const [selectedStore, setSelectedStore] = useState<ApiStore | null>(null);
+  const [storePickerOpen, setStorePickerOpen] = useState(false);
   const [menu,        setMenu]        = useState("");
   const [qty,         setQty]         = useState(1);
   const [desiredTime, setDesiredTime] = useState("");
@@ -623,14 +637,22 @@ function RequestPostScreen({ onBack, onSubmit }: {
   const [submitting,  setSubmitting]  = useState(false);
   const [error,       setError]       = useState<string | null>(null);
 
-  const canSubmit = city && branch && menu && desiredTime && kakao;
+  const canSubmit = Boolean(selectedStore && menu && desiredTime && kakao);
 
   async function handleSubmit() {
     if (!canSubmit) return;
     setSubmitting(true);
     setError(null);
     try {
-      await onSubmit({ city, branch, menu, qty, desiredTime, note, kakaoLink: kakao });
+      await onSubmit({
+        city: selectedStore!.region,
+        branch: selectedStore!.name,
+        menu,
+        qty,
+        desiredTime,
+        note,
+        kakaoLink: kakao,
+      });
       setDone(true);
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "요청을 등록하지 못했습니다.");
@@ -638,6 +660,28 @@ function RequestPostScreen({ onBack, onSubmit }: {
       setSubmitting(false);
     }
   }
+
+  if (storePickerOpen) return (
+    <div className="flex flex-col h-full bg-[#F8F6FF]">
+      <div className="flex items-center px-4 py-3 bg-white border-b border-gray-100 flex-shrink-0">
+        <button type="button" onClick={() => setStorePickerOpen(false)}
+          className="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center">
+          <ArrowLeft className="w-4 h-4 text-gray-700" />
+        </button>
+        <span className="flex-1 text-center font-black text-sm text-gray-900 -ml-8 pointer-events-none">희망 매장 선택</span>
+      </div>
+      <div className="flex-1 overflow-y-auto px-3 py-3">
+        <StoreBrowser
+          initialStores={stores}
+          selectedId={selectedStore?.id}
+          onSelect={(store) => {
+            setSelectedStore(store);
+            setStorePickerOpen(false);
+          }}
+        />
+      </div>
+    </div>
+  );
 
   if (done) return (
     <div className="flex flex-col h-full items-center justify-center gap-6 px-8 text-center bg-white">
@@ -668,25 +712,47 @@ function RequestPostScreen({ onBack, onSubmit }: {
 
       <div className="flex-1 overflow-y-auto">
         <div className="px-4 py-5 space-y-6">
-          <FormSection label="희망 지역">
-            <input
-              className="w-full bg-gray-50 border border-gray-100 rounded-xl px-4 py-3.5 text-sm outline-none text-gray-900 focus:border-primary transition-colors"
-              placeholder="예) 부산"
-              value={city} onChange={e => setCity(e.target.value)} />
-          </FormSection>
-
-          <FormSection label="희망 지점">
-            <input
-              className="w-full bg-gray-50 border border-gray-100 rounded-xl px-4 py-3.5 text-sm outline-none text-gray-900 focus:border-primary transition-colors"
-              placeholder="예) 부산대학로점"
-              value={branch} onChange={e => setBranch(e.target.value)} />
+          <FormSection label="희망 매장">
+            <button type="button" onClick={() => setStorePickerOpen(true)}
+              className={`w-full rounded-2xl border p-3.5 text-left transition-colors ${selectedStore ? "bg-yellow-50 border-yellow-200" : "bg-gray-50 border-gray-100"}`}>
+              {selectedStore ? (
+                <div className="flex items-center gap-3">
+                  <div className="w-11 h-11 rounded-2xl bg-[#FFE500] text-[#3A1D1D] flex items-center justify-center font-black flex-shrink-0">M</div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-black text-gray-900">{selectedStore.name}</p>
+                    <p className="text-xs text-gray-500 mt-0.5 line-clamp-2">{selectedStore.address}</p>
+                  </div>
+                  <span className="text-xs font-black text-primary flex-shrink-0">변경</span>
+                </div>
+              ) : (
+                <div className="flex items-center gap-3 py-1">
+                  <div className="w-10 h-10 rounded-xl bg-white flex items-center justify-center">
+                    <Store className="w-5 h-5 text-gray-300" />
+                  </div>
+                  <div className="flex-1">
+                    <p className="text-sm font-black text-gray-700">공식 매장을 선택해주세요</p>
+                    <p className="text-xs text-gray-400 mt-0.5">전국 매장명·지역·주소로 검색할 수 있어요.</p>
+                  </div>
+                  <ChevronRight className="w-4 h-4 text-gray-300" />
+                </div>
+              )}
+            </button>
           </FormSection>
 
           <FormSection label="원하는 메뉴">
-            <input
-              className="w-full bg-gray-50 border border-gray-100 rounded-xl px-4 py-3.5 text-sm outline-none text-gray-900 focus:border-primary transition-colors"
-              placeholder="예) 아메리카노 2잔"
-              value={menu} onChange={e => setMenu(e.target.value)} />
+            <div className="relative">
+              <select
+                value={menu}
+                onChange={e => setMenu(e.target.value)}
+                className={`w-full appearance-none rounded-xl border border-gray-100 bg-gray-50 px-4 py-3.5 pr-10 text-sm outline-none transition-colors focus:border-primary ${menu ? "text-gray-900" : "text-gray-400"}`}
+              >
+                <option value="" disabled>메뉴를 선택해주세요</option>
+                {REQUEST_MENU_OPTIONS.map(option => (
+                  <option key={option} value={option}>{option}</option>
+                ))}
+              </select>
+              <ChevronDown className="pointer-events-none absolute right-4 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+            </div>
           </FormSection>
 
           <FormSection label="수량">
@@ -1788,7 +1854,7 @@ function HomeScreen({ deals, onSelect, onLike, onGuide, onEvent, onSearch, onLis
           <Search className="w-4 h-4 text-gray-300 flex-shrink-0" />
           <span className="flex-1 text-sm text-gray-300">브랜드, 모집자, 할인율을 검색해보세요</span>
         </button>
-        <div className="flex items-center gap-1.5 mt-2 overflow-x-auto">
+        <div className="-mx-1 mt-2 flex items-center gap-1.5 overflow-x-auto px-1 pb-1">
           {[
             { icon: Store,  label: "브랜드" },
             { icon: SlidersHorizontal, label: "할인율" },
@@ -2706,7 +2772,7 @@ function EventScreen({ onBack }: { onBack: () => void }) {
             ))}
           </div>
           <p className="mt-5 rounded-2xl bg-gray-50 px-4 py-3 text-center text-xs font-semibold leading-relaxed text-gray-500">
-            마지막 여정의 끝에서, 여섯 개의 별이 너를 기다리고 있을 거야.
+            마지막 여정의 끝에서,<br />여섯 개의 별이 너를 기다리고 있을 거야.
           </p>
         </section>
 
@@ -3961,6 +4027,7 @@ export default function App() {
   if (postingRequest) return (
     <Shell>
       <RequestPostScreen
+        stores={stores}
         onBack={() => setPostingRequest(false)}
         onSubmit={async req => {
           const created = await api.createPurchaseRequest({
