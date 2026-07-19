@@ -1421,7 +1421,7 @@ export function VoteArena({
       className="km-shell min-h-screen w-full bg-black overflow-x-hidden relative select-none"
       style={{ fontFamily: "'Apple SD Gothic Neo', 'Malgun Gothic', sans-serif" }}
     >
-      <div className="max-w-xl mx-auto px-4 py-10">
+      <div className="max-w-2xl mx-auto px-4 py-12">
         {referralToken ? (
           <aside className="km-referral-banner" data-analytics-section="referral-banner">
             <span aria-hidden="true">🔥</span>
@@ -1450,7 +1450,7 @@ export function VoteArena({
               style={{ width: `${pourPercentage}%`, backgroundColor: DISPLAY.pour.accent }}
             />
           </div>
-          <div className="flex justify-between text-xs mt-2 km-score-labels">
+          <div className="flex justify-between text-sm mt-2 km-score-labels">
             <span style={{ color: DISPLAY.dip.accent }}>
               {DISPLAY.dip.label} {dipPercentage}% · {numberFormatter.format(dipCount)}표
             </span>
@@ -1468,7 +1468,7 @@ export function VoteArena({
           <p className="km-campaign-state" role="status">{campaignUnavailableMessage}</p>
         ) : null}
 
-        <div className="grid grid-cols-2 gap-3 mb-8">
+        <div className="grid grid-cols-2 gap-4 mb-8">
           <VoteButton
             choice="dip"
             isSelected={lastChoice === "dip"}
