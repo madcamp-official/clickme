@@ -32,6 +32,7 @@ Internet
 - `/srv/clickme/shared/clickme.env` 권한 `0600`
 - 최소 32바이트 난수 `VISITOR_HASH_SECRET`; release 사이에서 유지
 - 공개 origin `NEXT_PUBLIC_SITE_URL=https://clickme.madcamp-kaist.org`
+- `/admin` 운영 대시보드 접근용 `ADMIN_PASSWORD`. 저장소 `.env.example`에는 플레이스홀더만 있으므로 `/srv/clickme/shared/clickme.env`에 운영자가 직접 실제 값을 추가해야 합니다. 값을 바꾸면 그 즉시 새 로그인부터 새 비밀번호가 필요하지만, 이미 발급된 관리자 세션 쿠키는 상태 없이 서명되어 있어 최대 12시간 후 자연 만료될 때까지는 유효합니다.
 
 공유 runtime 환경파일의 listener 기본값은 다음과 같습니다. systemd는 `HOSTNAME=127.0.0.1`을, Compose는 container 내부 접근을 위해 `HOSTNAME=0.0.0.0`을 명시적으로 덮어씁니다.
 

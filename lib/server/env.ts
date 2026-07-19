@@ -37,6 +37,10 @@ export function getVisitorHashSecret(): string {
   return secret;
 }
 
+export function getAdminPassword(): string {
+  return required("ADMIN_PASSWORD");
+}
+
 export function getSiteUrl(): string {
   const raw = required("NEXT_PUBLIC_SITE_URL");
   try {

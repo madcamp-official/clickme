@@ -1,0 +1,280 @@
+.shell {
+  background: #0a0a0a;
+  color: #eaeaea;
+  min-height: 100vh;
+}
+
+.topbar {
+  align-items: center;
+  background: #141414;
+  border-bottom: 1px solid #262626;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 20px;
+  justify-content: space-between;
+  padding: 14px 24px;
+}
+
+.brand {
+  color: #f2f2f2;
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.navLink {
+  border-radius: 8px;
+  color: #a8a8a8;
+  font-size: 14px;
+  font-weight: 600;
+  padding: 8px 12px;
+}
+
+.navLink:hover {
+  background: #1f1f1f;
+  color: #eaeaea;
+}
+
+.navLinkActive {
+  background: #2f6fed;
+  color: #fff;
+}
+
+.main {
+  margin: 0 auto;
+  max-width: 1080px;
+  padding: 28px 24px 80px;
+}
+
+.heading {
+  color: #f2f2f2;
+  font-size: 22px;
+  font-weight: 700;
+  margin: 0 0 20px;
+}
+
+.cardGrid {
+  display: grid;
+  gap: 14px;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  margin-bottom: 28px;
+}
+
+.card {
+  background: #161616;
+  border: 1px solid #262626;
+  border-radius: 10px;
+  padding: 16px 18px;
+}
+
+.cardLabel {
+  color: #909090;
+  font-size: 12px;
+  margin: 0 0 6px;
+}
+
+.cardValue {
+  color: #f2f2f2;
+  font-size: 24px;
+  font-weight: 700;
+  margin: 0;
+}
+
+.cardHint {
+  color: #6f6f6f;
+  font-size: 12px;
+  margin: 4px 0 0;
+}
+
+.cardValueSmall {
+  color: #f2f2f2;
+  font-size: 15px;
+  font-weight: 700;
+  margin: 0;
+}
+
+.section {
+  margin-bottom: 36px;
+}
+
+.sectionTitle {
+  color: #d8d8d8;
+  font-size: 15px;
+  font-weight: 700;
+  margin: 0 0 10px;
+}
+
+.tableWrap {
+  border: 1px solid #262626;
+  border-radius: 10px;
+  overflow-x: auto;
+}
+
+.table {
+  border-collapse: collapse;
+  font-size: 13px;
+  width: 100%;
+}
+
+.table th,
+.table td {
+  border-bottom: 1px solid #232323;
+  padding: 9px 12px;
+  text-align: left;
+  white-space: nowrap;
+}
+
+.table th {
+  background: #161616;
+  color: #939393;
+  font-weight: 600;
+}
+
+.table tr:last-child td {
+  border-bottom: none;
+}
+
+.wrapCell {
+  white-space: normal;
+}
+
+.empty {
+  color: #7a7a7a;
+  font-size: 13px;
+  padding: 14px 2px;
+}
+
+.form {
+  background: #161616;
+  border: 1px solid #262626;
+  border-radius: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-bottom: 28px;
+  max-width: 520px;
+  padding: 18px;
+}
+
+.formRow {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.formLabel {
+  color: #b6b6b6;
+  font-size: 13px;
+}
+
+.input,
+.select,
+.textarea {
+  background: #0e0e0e;
+  border: 1px solid #333;
+  border-radius: 8px;
+  color: #f2f2f2;
+  font-size: 14px;
+  padding: 9px 11px;
+}
+
+.textarea {
+  min-height: 64px;
+  resize: vertical;
+}
+
+.button {
+  background: #2f6fed;
+  border: none;
+  border-radius: 8px;
+  color: #fff;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 600;
+  padding: 9px 16px;
+}
+
+.button:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.buttonDanger {
+  background: transparent;
+  border: 1px solid #7a2020;
+  border-radius: 6px;
+  color: #ff8080;
+  cursor: pointer;
+  font-size: 12px;
+  padding: 5px 10px;
+}
+
+.buttonDanger:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.buttonGhost {
+  background: transparent;
+  border: 1px solid #333;
+  border-radius: 8px;
+  color: #c8c8c8;
+  cursor: pointer;
+  font-size: 13px;
+  padding: 7px 12px;
+}
+
+.formError {
+  background: rgba(255, 80, 80, 0.12);
+  border-left: 3px solid #ff5050;
+  color: #ffb3b3;
+  font-size: 13px;
+  padding: 9px 11px;
+}
+
+.formSuccess {
+  background: rgba(80, 200, 120, 0.12);
+  border-left: 3px solid #3fbf6f;
+  color: #b0f0c4;
+  font-size: 13px;
+  padding: 9px 11px;
+}
+
+.hint {
+  color: #7a7a7a;
+  font-size: 12px;
+}
+
+.pageHint {
+  color: #7a7a7a;
+  font-size: 13px;
+  margin: -12px 0 20px;
+}
+
+.badge {
+  border-radius: 999px;
+  display: inline-block;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 3px 10px;
+}
+
+.badgeActive {
+  background: rgba(80, 200, 120, 0.15);
+  color: #6fe098;
+}
+
+.badgeProtected {
+  background: rgba(255, 200, 0, 0.15);
+  color: #ffd558;
+}
+
+.badgeReadOnly {
+  background: rgba(255, 80, 80, 0.15);
+  color: #ff8f8f;
+}
