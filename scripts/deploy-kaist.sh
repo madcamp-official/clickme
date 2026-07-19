@@ -186,8 +186,8 @@ fi
 comment_status="$(curl --silent --show-error --connect-timeout 3 --max-time 15 \
   --header "$host_header" --output "$work_dir/comments" --write-out '%{http_code}' \
   "$base_url/api/comments")"
-[[ "$comment_status" == "410" ]]
-grep -Eq '"code"[[:space:]]*:[[:space:]]*"COMMENTS_DISABLED"' "$work_dir/comments"
+[[ "$comment_status" == "200" ]]
+grep -Eq '"comments"[[:space:]]*:[[:space:]]*\[' "$work_dir/comments"
 
 vote_status="$(curl --silent --show-error --connect-timeout 3 --max-time 15 \
   --header "$host_header" \
@@ -650,7 +650,7 @@ comment_status="$(curl --silent --show-error --connect-timeout 3 --max-time 10 \
   --header 'Host: clickme.madcamp-kaist.org' \
   --output /dev/null --write-out '%{http_code}' \
   http://127.0.0.1:3000/api/comments)"
-[[ "$comment_status" == "410" ]] || {
+[[ "$comment_status" == "200" ]] || {
   printf 'ERROR: port 3000 does not expose the reviewed Clickme Nginx boundary.\n' >&2
   exit 1
 }
@@ -870,7 +870,7 @@ docker exec "$candidate_name" node -e '
     if (!results.ok || !resultBody?.counts || !resultBody?.campaign || "userChoice" in resultBody) process.exit(1);
     const comments = await fetch("http://127.0.0.1:3001/api/comments");
     const commentBody = await comments.json();
-    if (comments.status !== 410 || commentBody?.code !== "COMMENTS_DISABLED") process.exit(1);
+    if (!comments.ok || !Array.isArray(commentBody?.comments)) process.exit(1);
   };
   check().catch(() => process.exit(1));
 '
@@ -998,8 +998,8 @@ fi
 comment_status="$(curl --silent --show-error \
   --output "$candidate_dir/comments" --write-out '%{http_code}' \
   "http://127.0.0.1:${candidate_port}/api/comments")"
-[[ "$comment_status" == "410" ]]
-grep -Eq '"code"[[:space:]]*:[[:space:]]*"COMMENTS_DISABLED"' "$candidate_dir/comments"
+[[ "$comment_status" == "200" ]]
+grep -Eq '"comments"[[:space:]]*:[[:space:]]*\[' "$candidate_dir/comments"
 rm -rf "$candidate_dir"
 
 cleanup_candidate
