@@ -12,19 +12,19 @@ function metadataBase(): URL {
 
 export const metadata: Metadata = {
   metadataBase: metadataBase(),
-  title: "카리나 vs 장원영 — 오늘의 밸런스게임",
-  description: "카리나와 장원영, 마음 가는 쪽을 계속 눌러 취향 대결에 참여하세요.",
+  title: "스페인 vs 아르헨티나 — 오늘의 밸런스게임",
+  description: "FIFA 월드컵 2026 결승, 스페인과 아르헨티나 중 우승 예측을 계속 눌러 참여하세요.",
   openGraph: {
-    title: "카리나 vs 장원영 — 오늘의 밸런스게임",
-    description: "카리나? 장원영? 진심을 담아 계속 눌러 보세요.",
+    title: "스페인 vs 아르헨티나 — 오늘의 밸런스게임",
+    description: "스페인? 아르헨티나? 우승 예측을 계속 눌러 보세요.",
     type: "website",
     locale: "ko_KR",
     siteName: "오늘의 밸런스게임",
   },
   twitter: {
     card: "summary",
-    title: "카리나 vs 장원영",
-    description: "마음 가는 쪽을 계속 눌러 보세요.",
+    title: "스페인 vs 아르헨티나",
+    description: "우승 예측을 계속 눌러 보세요.",
   },
 };
 
