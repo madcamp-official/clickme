@@ -1421,7 +1421,7 @@ export function VoteArena({
       className="km-shell min-h-screen w-full bg-black overflow-x-hidden relative select-none"
       style={{ fontFamily: "'Apple SD Gothic Neo', 'Malgun Gothic', sans-serif" }}
     >
-      <div className="max-w-2xl mx-auto px-4 py-12">
+      <div className="max-w-2xl sm:max-w-3xl lg:max-w-5xl mx-auto px-4 sm:px-6 py-8 sm:py-12">
         {referralToken ? (
           <aside className="km-referral-banner" data-analytics-section="referral-banner">
             <span aria-hidden="true">🔥</span>
@@ -1440,7 +1440,7 @@ export function VoteArena({
         </div>
 
         <section aria-label="실시간 투표 현황" className="mb-6" data-analytics-section="scoreboard">
-          <div className="flex overflow-hidden h-1 rounded-full bg-neutral-900">
+          <div className="flex overflow-hidden h-2 rounded-full bg-neutral-900">
             <span
               className="h-full km-score-bar"
               style={{ width: `${dipPercentage}%`, backgroundColor: DISPLAY.dip.accent }}
@@ -1450,7 +1450,7 @@ export function VoteArena({
               style={{ width: `${pourPercentage}%`, backgroundColor: DISPLAY.pour.accent }}
             />
           </div>
-          <div className="flex justify-between text-sm mt-2 km-score-labels">
+          <div className="flex justify-between text-base mt-3 km-score-labels">
             <span style={{ color: DISPLAY.dip.accent }}>
               {DISPLAY.dip.label} {dipPercentage}% · {numberFormatter.format(dipCount)}표
             </span>
@@ -1468,7 +1468,7 @@ export function VoteArena({
           <p className="km-campaign-state" role="status">{campaignUnavailableMessage}</p>
         ) : null}
 
-        <div className="grid grid-cols-2 gap-4 mb-8">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6 mb-8">
           <VoteButton
             choice="dip"
             isSelected={lastChoice === "dip"}
@@ -1496,6 +1496,7 @@ export function VoteArena({
             : campaignReadOnly ? "현재 공개된 투표 결과예요." : "마음 가는 쪽을 계속 눌러 주세요!"}
         </p>
 
+        <div className="max-w-2xl mx-auto w-full">
         {canShare && lastAcceptedChoice ? (
           <section
             className="km-share-card"
@@ -1609,6 +1610,7 @@ export function VoteArena({
           <span onClick={handleFooterClick}>⚡ 오늘의 밸런스게임 · 투표는 계속됩니다 ⚡</span>
           <a href="/privacy">개인정보 처리 안내</a>
         </footer>
+        </div>
       </div>
 
       {notice ? <p className={`km-toast km-toast--${notice.tone}`} role="status">{notice.message}</p> : null}
@@ -1685,7 +1687,7 @@ function VoteButton({
         src={option.video}
       />
       <span aria-hidden="true" className="km-choice-overlay absolute inset-0" />
-      <span className="absolute bottom-0 left-0 right-0 p-4 text-left km-choice-content">
+      <span className="absolute bottom-0 left-0 right-0 p-4 sm:p-5 lg:p-6 text-left km-choice-content">
         <span className="km-choice-eyebrow" style={{ color: option.accent }}>{option.eyebrow}</span>
         <strong className="km-choice-label">{option.label}</strong>
       </span>
