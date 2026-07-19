@@ -94,12 +94,12 @@ assert_header() {
 log "checking home page"
 status="$(request GET / "$WORK_DIR/home.html" "$WORK_DIR/home.headers")"
 expect_status "$status" 200 "home page"
-grep -q '카리나' "$WORK_DIR/home.html" || {
-  printf 'ERROR: home page does not contain 카리나\n' >&2
+grep -q '스페인' "$WORK_DIR/home.html" || {
+  printf 'ERROR: home page does not contain 스페인\n' >&2
   exit 1
 }
-grep -q '장원영' "$WORK_DIR/home.html" || {
-  printf 'ERROR: home page does not contain 장원영\n' >&2
+grep -q '아르헨티나' "$WORK_DIR/home.html" || {
+  printf 'ERROR: home page does not contain 아르헨티나\n' >&2
   exit 1
 }
 
