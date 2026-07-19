@@ -12,5 +12,6 @@ export default defineConfig([
     "Viral balance game webpage/**",
     "topic2/**",
     "topic3/**",
+    "topic4/**",
   ]),
 ]);
