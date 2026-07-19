@@ -1670,7 +1670,7 @@ function VoteButton({
       disabled={isDisabled}
       onClick={(event) => onVote(choice, event)}
       style={{
-        aspectRatio: "2/3",
+        aspectRatio: "100/57",
         outline: isSelected ? `2px solid ${option.accent}` : "2px solid transparent",
         boxShadow: isSelected ? `0 0 24px ${option.accent}66` : "none",
       }}
