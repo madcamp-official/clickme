@@ -332,6 +332,30 @@ server {
         proxy_pass http://clickme_next;
     }
 
+    # Admin auth/mutation endpoints (login, logout, campaign window, topic
+    # archive, comment moderation). These use the app's own signed
+    # clickme_admin_session cookie, not the visitor clickme_session cookie
+    # checked elsewhere, so hasValidAdminSession() in the app is the sole
+    # session gate; Nginx only enforces the method allow-list, Origin, and
+    # Fetch Metadata the same way the other mutation endpoints do.
+    location /api/admin/ {
+        if ($request_method !~ ^(?:POST|DELETE)$) { return 405; }
+
+        set $clickme_admin_origin_check "$request_method$clickme_origin_ok";
+        set $clickme_admin_fetch_site_check "$request_method$clickme_fetch_site_ok";
+        set $clickme_admin_json_check "$request_method$clickme_json_ok";
+
+        if ($clickme_admin_origin_check = "POST0") { return 403; }
+        if ($clickme_admin_origin_check = "DELETE0") { return 403; }
+        if ($clickme_admin_fetch_site_check = "POST0") { return 403; }
+        if ($clickme_admin_fetch_site_check = "DELETE0") { return 403; }
+        if ($clickme_admin_json_check = "POST0") { return 415; }
+
+        client_max_body_size 4k;
+        limit_req zone=clickme_mutation_net burst=30 nodelay;
+        proxy_pass http://clickme_next;
+    }
+
     # A referral token is 128 random bits encoded as 22 unpadded base64url
     # characters. Malformed tokens return before they can cause a DB lookup.
     location ~ "^/r/[A-Za-z0-9_-]{22}$" {
