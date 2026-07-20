@@ -13,5 +13,6 @@ export default defineConfig([
     "topic2/**",
     "topic3/**",
     "topic4/**",
+    "topic5/**",
   ]),
 ]);
