@@ -16,6 +16,19 @@ export function formatDateTime(value: string | null | undefined): string {
   });
 }
 
+// Session/cohort/share dates are plain Postgres `date` values (e.g.
+// "2026-07-19") already computed in Asia/Seoul by the view. Routing them
+// through `new Date()` + toLocaleString would reinterpret the bare date as
+// UTC midnight and tack on a spurious time-of-day, so this formats the
+// digits directly instead.
+export function formatDateOnly(value: string | null | undefined): string {
+  if (!value) return "—";
+  const match = /^(\d{4})-(\d{2})-(\d{2})/.exec(value);
+  if (!match) return "—";
+  const [, year, month, day] = match;
+  return `${year}. ${month}. ${day}.`;
+}
+
 export function hoursAgoIso(hours: number): string {
   return new Date(Date.now() - hours * 60 * 60 * 1000).toISOString();
 }
