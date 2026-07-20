@@ -5,7 +5,7 @@ import type { CSSProperties, MouseEvent } from "react";
 
 import { motion } from "motion/react";
 
-import { VideoBackground } from "./video-background";
+import { ImageWithFallback } from "./image-with-fallback";
 
 type Choice = "dip" | "pour";
 type CampaignStatus = "active" | "protected" | "read_only";
@@ -87,22 +87,22 @@ type Burst = {
 
 const DISPLAY = {
   dip: {
-    label: "스페인",
-    eyebrow: "ESP",
-    video: "/videos/spain.mp4",
-    accent: "#ef4444",
-    emoji: "🇪🇸",
-    registeredText: "스페인 우승 예측!",
-    burstTokens: ["스페인", "🇪🇸", "Vamos!", "Yamal!", "ESPAÑA"],
+    label: "이채영",
+    eyebrow: "CY",
+    photo: "/images/chaeyoung.webp",
+    accent: "#fb7185",
+    emoji: "💗",
+    registeredText: "이채영 최애로 등록!",
+    burstTokens: ["이채영", "💗", "화이팅!", "CHAEYOUNG", "최고"],
   },
   pour: {
-    label: "아르헨티나",
-    eyebrow: "ARG",
-    video: "/videos/argentina.mp4",
-    accent: "#38bdf8",
-    emoji: "🇦🇷",
-    registeredText: "아르헨티나 우승 예측!",
-    burstTokens: ["아르헨티나", "🇦🇷", "Messi!", "🐐", "ARGENTINA"],
+    label: "백지헌",
+    eyebrow: "JH",
+    photo: "/images/jiheon.webp",
+    accent: "#fcd34d",
+    emoji: "💛",
+    registeredText: "백지헌 최애로 등록!",
+    burstTokens: ["백지헌", "💛", "사랑해", "JIHEON", "취향저격"],
   },
 } as const;
 
@@ -346,7 +346,7 @@ async function copyText(value: string): Promise<void> {
 }
 
 function shareMessage(choice: Choice): string {
-  return `나는 ${DISPLAY[choice].label} 우승 예측! 당신의 예측은?`;
+  return `나는 ${DISPLAY[choice].label}파! 당신의 최애는?`;
 }
 
 // Korean topic-marker particle (은/는): 은 follows a syllable with a final
@@ -1319,7 +1319,7 @@ export function VoteArena({
     try {
       const { url, generated } = await resolveShareUrl();
       const shareData = {
-        title: "스페인 vs 아르헨티나",
+        title: "이채영 vs 백지헌",
         text: shareMessage(lastAcceptedChoice),
         url,
       };
@@ -1426,17 +1426,17 @@ export function VoteArena({
           <aside className="km-referral-banner" data-analytics-section="referral-banner">
             <span aria-hidden="true">🔥</span>
             <div>
-              <strong>친구가 당신의 예측을 기다리고 있어요</strong>
-              <p>스페인과 아르헨티나, 어느 팀이 우승할지 예측해 주세요!</p>
+              <strong>친구가 당신의 최애를 기다리고 있어요</strong>
+              <p>이채영과 백지헌, 누가 최애인지 골라 주세요!</p>
             </div>
           </aside>
         ) : null}
 
         <div className="text-center mb-8">
           <p className="km-badge">⚡ 오늘의 밸런스게임 ⚡</p>
-          <h1 id="game-title" className="km-title">스페인 vs 아르헨티나</h1>
-          <p className="km-worldcup">⚽ FIFA WORLD CUP 2026 · THE FINAL ⚽</p>
-          <p className="km-subtitle">여러 번 클릭 가능 · 우승 예측을 남겨봐</p>
+          <h1 id="game-title" className="km-title">이채영 vs 백지헌</h1>
+          <p className="km-worldcup">💗 FROMIS_9 · 최애 픽 💗</p>
+          <p className="km-subtitle">여러 번 클릭 가능 · 최애를 계속 눌러봐</p>
         </div>
 
         <section aria-label="실시간 투표 현황" className="mb-6" data-analytics-section="scoreboard">
@@ -1504,7 +1504,7 @@ export function VoteArena({
             style={{ borderColor: DISPLAY[lastAcceptedChoice].accent }}
           >
             <p className="km-share-eyebrow">내 선택 결과</p>
-            <h2>나는 <strong style={{ color: DISPLAY[lastAcceptedChoice].accent }}>{DISPLAY[lastAcceptedChoice].label}</strong> 우승!</h2>
+            <h2>나는 <strong style={{ color: DISPLAY[lastAcceptedChoice].accent }}>{DISPLAY[lastAcceptedChoice].label}파!</strong></h2>
             <p>
               지금 {DISPLAY[lastAcceptedChoice].label}{topicParticle(DISPLAY[lastAcceptedChoice].label)} <b>{lastAcceptedChoice === "dip" ? dipPercentage : pourPercentage}%</b>
               {dipPercentage === pourPercentage
@@ -1672,7 +1672,7 @@ function VoteButton({
       disabled={isDisabled}
       onClick={(event) => onVote(choice, event)}
       style={{
-        aspectRatio: "100/57",
+        aspectRatio: "3/4",
         outline: isSelected ? `2px solid ${option.accent}` : "2px solid transparent",
         boxShadow: isSelected ? `0 0 24px ${option.accent}66` : "none",
       }}
@@ -1681,10 +1681,10 @@ function VoteButton({
       whileHover={isDisabled ? undefined : { scale: 1.02 }}
       whileTap={isDisabled ? undefined : { scale: 0.97 }}
     >
-      <VideoBackground
+      <ImageWithFallback
+        alt={option.label}
         className="absolute inset-0 w-full h-full object-cover"
-        fallbackClassName="absolute inset-0 w-full h-full bg-neutral-900"
-        src={option.video}
+        src={option.photo}
       />
       <span aria-hidden="true" className="km-choice-overlay absolute inset-0" />
       <span className="absolute bottom-0 left-0 right-0 p-4 sm:p-5 lg:p-6 text-left km-choice-content">
@@ -1692,7 +1692,7 @@ function VoteButton({
         <strong className="km-choice-label">{option.label}</strong>
       </span>
       {isSelected ? (
-        <span className="km-picked" style={{ backgroundColor: option.accent }}>내 예측!</span>
+        <span className="km-picked" style={{ backgroundColor: option.accent }}>내 최애!</span>
       ) : null}
       <span aria-hidden="true" className="km-bursts">
         {bursts.map((burst) => (
