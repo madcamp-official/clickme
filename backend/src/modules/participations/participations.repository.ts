@@ -1,6 +1,7 @@
 import type { PrismaClient } from "../../generated/prisma/client.js";
 import { prisma } from "../../infrastructure/prisma/client.js";
 import { AppError } from "../../common/errors/AppError.js";
+import { NCT_WISH_EVENT_MENU_CATALOG_NAMES } from "../menus/nct-wish-event-menus.js";
 
 const postInclude = {
   writer: {
@@ -24,7 +25,27 @@ export class ParticipationsRepository {
     return this.db.participation.findUnique({ where: { userId_postId: { userId, postId } } });
   }
 
-  createAndReserve(userId: string, postId: string, quantity: number, pickupStore: string) {
+  async findSelection(storeId: string, menuId: string) {
+    const [store, menu] = await Promise.all([
+      this.db.store.findFirst({ where: { id: storeId, isActive: true } }),
+      this.db.menu.findFirst({
+        where: {
+          id: menuId,
+          isActive: true,
+          name: { in: [...NCT_WISH_EVENT_MENU_CATALOG_NAMES] },
+          storeMenus: { none: { storeId, availability: "UNAVAILABLE" } }
+        }
+      })
+    ]);
+    return { store, menu };
+  }
+
+  createAndReserve(
+    userId: string,
+    postId: string,
+    quantity: number,
+    selection: { pickupStoreId: string; pickupStore: string; menuId: string; menu: string }
+  ) {
     return this.db.$transaction(async (tx) => {
       const reserved = await tx.post.updateMany({
         where: { id: postId, deletedAt: null, status: "OPEN", remainCount: { gte: quantity } },
@@ -39,9 +60,24 @@ export class ParticipationsRepository {
       }
 
       const participation = await tx.participation.create({
-        data: { userId, postId, quantity, pickupStore }
+        data: { userId, postId, quantity, ...selection }
       });
       const post = await tx.post.findUniqueOrThrow({ where: { id: postId } });
+      const participant = await tx.user.findUniqueOrThrow({
+        where: { id: userId },
+        select: { nickname: true }
+      });
+      await tx.notification.create({
+        data: {
+          recipientId: post.writerId,
+          actorId: userId,
+          type: "PARTICIPATION_CREATED",
+          title: "새 참여 신청이 도착했어요",
+          message: `${participant.nickname}님이 ${selection.menu} ${quantity}잔 참여를 신청했습니다. 픽업 매장은 ${selection.pickupStore}입니다.`,
+          resourceType: "Post",
+          resourceId: postId
+        }
+      });
       if (post.remainCount === 0) {
         await tx.post.update({
           where: { id: postId },

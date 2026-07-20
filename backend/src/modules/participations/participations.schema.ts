@@ -5,7 +5,8 @@ export const createParticipationSchema = z.object({
   body: z
     .object({
       quantity: z.number().int().min(1).max(30),
-      pickupStore: z.string().trim().min(1).max(100)
+      pickupStoreId: z.string().min(1),
+      menuId: z.string().min(1)
     })
     .strict()
 });

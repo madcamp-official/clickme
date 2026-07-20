@@ -40,7 +40,8 @@ const envSchema = z
       .string()
       .optional()
       .transform((value) => value || undefined),
-    ADMIN_KAKAO_USER_IDS: z.string().default("")
+    ADMIN_KAKAO_USER_IDS: z.string().default(""),
+    ADMIN_USER_IDS: z.string().default("")
   })
   .superRefine((value, ctx) => {
     const origins = value.CORS_ORIGINS.split(",").map((origin) => origin.trim());
@@ -77,19 +78,34 @@ const envSchema = z
 export type Env = z.infer<typeof envSchema> & {
   corsOrigins: string[];
   adminKakaoUserIds: Set<string>;
+  adminUserIds: Set<string>;
 };
 
 export function parseEnv(source: NodeJS.ProcessEnv): Env {
   const parsed = envSchema.parse(source);
+  const configuredKakaoIds = parsed.ADMIN_KAKAO_USER_IDS.split(",")
+    .map((value) => value.trim())
+    .filter(Boolean);
+  const configuredUserIds = parsed.ADMIN_USER_IDS.split(",")
+    .map((value) => value.trim())
+    .filter(Boolean);
   return {
     ...parsed,
     corsOrigins: parsed.CORS_ORIGINS.split(",").map((value) => value.trim()),
-    adminKakaoUserIds: new Set(
-      parsed.ADMIN_KAKAO_USER_IDS.split(",")
-        .map((value) => value.trim())
-        .filter(Boolean)
-    )
+    // 운영 Kakao 회원번호는 숫자지만, 기존 개발/이관 데이터의 문자열
+    // kakaoUserId도 관리자 매칭에서 제외하지 않습니다.
+    adminKakaoUserIds: new Set(configuredKakaoIds),
+    // 이전 설정에서 ADMIN_KAKAO_USER_IDS에 서비스 User.id를 넣은 경우도
+    // 중단 없이 인식하고, 새 설정부터는 이름이 명확한 ADMIN_USER_IDS를 사용합니다.
+    adminUserIds: new Set([
+      ...configuredUserIds,
+      ...configuredKakaoIds.filter((value) => !/^\d+$/.test(value))
+    ])
   };
+}
+
+export function isConfiguredAdminUser(user: { id: string; kakaoUserId: string }): boolean {
+  return env.adminKakaoUserIds.has(user.kakaoUserId) || env.adminUserIds.has(user.id);
 }
 
 export const env = parseEnv(process.env);

@@ -1,5 +1,5 @@
 import { Prisma, UserStatus, type User } from "../../generated/prisma/client.js";
-import { env } from "../../config/env.js";
+import { env, isConfiguredAdminUser } from "../../config/env.js";
 import { AppError } from "../../common/errors/AppError.js";
 import { randomBase64Url, sha256 } from "../../common/utils/crypto.js";
 import { signAccessToken } from "../../common/utils/jwt.js";
@@ -85,14 +85,17 @@ export class AuthService {
     const kakaoAccessToken = await this.kakaoClient.exchangeCode(code);
     const profile = await this.kakaoClient.fetchProfile(kakaoAccessToken);
     const kakaoUserId = String(profile.kakaoUserId);
-    const makeAdmin = env.adminKakaoUserIds.has(kakaoUserId);
     let user = await this.repository.findUserByKakaoId(kakaoUserId);
     if (!user) {
-      user = await this.createUniqueUser({ ...profile, kakaoUserId, makeAdmin });
+      user = await this.createUniqueUser({
+        ...profile,
+        kakaoUserId,
+        makeAdmin: env.adminKakaoUserIds.has(kakaoUserId)
+      });
     } else {
       // Kakao 프로필은 최초 가입 시에만 기본값으로 사용합니다. 이후에는 사용자가
       // 서비스에서 선택하거나 삭제한 프로필 사진을 다시 로그인해도 보존합니다.
-      user = await this.repository.updateLogin(user.id, makeAdmin);
+      user = await this.repository.updateLogin(user.id, isConfiguredAdminUser(user));
     }
     if (user.status === UserStatus.SUSPENDED || user.deletedAt) {
       throw new AppError("USER_SUSPENDED", "이용이 정지된 사용자입니다.", 403);
@@ -112,6 +115,10 @@ export class AuthService {
     if (session.user.status !== UserStatus.ACTIVE || session.user.deletedAt) {
       throw new AppError("USER_SUSPENDED", "이용할 수 없는 사용자입니다.", 403);
     }
+    let sessionUser = session.user;
+    if (sessionUser.role !== "ADMIN" && isConfiguredAdminUser(sessionUser)) {
+      sessionUser = await this.repository.promoteToAdmin(sessionUser.id);
+    }
     const refreshToken = randomBase64Url(48);
     const next = await this.repository.rotateSession({
       oldSessionId: session.id,
@@ -124,13 +131,13 @@ export class AuthService {
     const accessToken = await signAccessToken({
       userId: session.userId,
       sessionId: next.id,
-      role: session.user.role
+      role: sessionUser.role
     });
     return {
       accessToken,
       refreshToken,
       accessExpiresAt: new Date(Date.now() + env.JWT_ACCESS_TTL_SECONDS * 1000).toISOString(),
-      user: publicUser(session.user)
+      user: publicUser(sessionUser)
     };
   }
 

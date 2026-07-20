@@ -3,7 +3,8 @@ import { ok } from "../../common/types/api.js";
 import { PurchaseRequestsService } from "./purchase-requests.service.js";
 import type {
   CreatePurchaseRequestInput,
-  PurchaseRequestListInput
+  PurchaseRequestListInput,
+  UpdatePurchaseRequestInput
 } from "./purchase-requests.schema.js";
 
 export class PurchaseRequestsController {
@@ -21,6 +22,17 @@ export class PurchaseRequestsController {
       .json(
         ok(await this.service.create(req.auth!.userId, req.body as CreatePurchaseRequestInput))
       );
+  };
+  update = async (req: Request, res: Response): Promise<void> => {
+    res.json(
+      ok(
+        await this.service.update(
+          req.params.id as string,
+          req.auth!.userId,
+          req.body as UpdatePurchaseRequestInput
+        )
+      )
+    );
   };
   accept = async (req: Request, res: Response): Promise<void> => {
     res.json(ok(await this.service.accept(req.params.id as string, req.auth!.userId)));

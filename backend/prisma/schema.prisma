@@ -33,6 +33,23 @@ enum PurchaseRequestStatus {
   CANCELLED
 }
 
+enum NotificationType {
+  PURCHASE_REQUEST_ACCEPTED
+  PARTICIPATION_CREATED
+}
+
+enum MenuCategory {
+  DRINK
+  FOOD
+  PRODUCT
+}
+
+enum MenuAvailability {
+  AVAILABLE
+  UNAVAILABLE
+  UNKNOWN
+}
+
 enum InquiryCategory {
   SERVICE
   ACCOUNT
@@ -60,32 +77,35 @@ enum ReportStatus {
 }
 
 model User {
-  id               String            @id @default(cuid())
-  kakaoUserId      String            @unique @db.VarChar(32)
-  nickname         String            @unique @db.VarChar(20)
-  profileImage     String?
-  role             UserRole          @default(USER)
-  status           UserStatus        @default(ACTIVE)
-  rating           Float             @default(0)
-  reviewCount      Int               @default(0)
-  lastLoginAt      DateTime          @default(now())
-  createdAt        DateTime          @default(now())
-  updatedAt        DateTime          @updatedAt
-  suspendedAt      DateTime?
-  suspensionReason String?
-  deletedAt        DateTime?
-  sessions         AuthSession[]
-  posts            Post[]            @relation("PostWriter")
-  writtenReviews   Review[]          @relation("ReviewWriter")
-  receivedReviews  Review[]          @relation("ReviewSeller")
-  favorites        Favorite[]
-  participations   Participation[]
-  purchaseRequests PurchaseRequest[] @relation("PurchaseRequestRequester")
-  acceptedRequests PurchaseRequest[] @relation("PurchaseRequestAccepter")
-  inquiries        Inquiry[]
-  reports          Report[]          @relation("ReportReporter")
-  handledReports   Report[]          @relation("ReportHandler")
-  adminActions     AdminActionLog[]  @relation("AdminActions")
+  id                 String            @id @default(cuid())
+  kakaoUserId        String            @unique @db.VarChar(32)
+  nickname           String            @unique @db.VarChar(20)
+  profileImage       String?
+  role               UserRole          @default(USER)
+  status             UserStatus        @default(ACTIVE)
+  rating             Float             @default(0)
+  reviewCount        Int               @default(0)
+  lastLoginAt        DateTime          @default(now())
+  createdAt          DateTime          @default(now())
+  updatedAt          DateTime          @updatedAt
+  suspendedAt        DateTime?
+  suspensionReason   String?
+  deletedAt          DateTime?
+  sessions           AuthSession[]
+  posts              Post[]            @relation("PostWriter")
+  writtenReviews     Review[]          @relation("ReviewWriter")
+  receivedReviews    Review[]          @relation("ReviewSeller")
+  favorites          Favorite[]
+  participations     Participation[]
+  purchaseRequests   PurchaseRequest[] @relation("PurchaseRequestRequester")
+  acceptedRequests   PurchaseRequest[] @relation("PurchaseRequestAccepter")
+  inquiries          Inquiry[]
+  reports            Report[]          @relation("ReportReporter")
+  handledReports     Report[]          @relation("ReportHandler")
+  adminActions       AdminActionLog[]  @relation("AdminActions")
+  verifiedStoreMenus StoreMenu[]       @relation("StoreMenuVerifier")
+  notifications      Notification[]    @relation("NotificationRecipient")
+  notificationEvents Notification[]    @relation("NotificationActor")
 
   @@index([status])
   @@index([createdAt])
@@ -108,29 +128,75 @@ model AuthSession {
 }
 
 model Store {
-  id           String    @id @default(cuid())
-  brand        String    @default("메가MGC커피")
-  name         String
-  region       String
-  district     String?
-  address      String
-  phone        String?
-  latitude     Decimal?  @db.Decimal(9, 6)
-  longitude    Decimal?  @db.Decimal(9, 6)
-  source       String    @default("MANUAL")
-  externalId   String?   @unique
-  sourceUrl    String?
-  isActive     Boolean   @default(true)
-  lastSyncedAt DateTime?
-  createdAt    DateTime  @default(now())
-  updatedAt    DateTime  @updatedAt
-  posts        Post[]
+  id               String            @id @default(cuid())
+  brand            String            @default("메가MGC커피")
+  name             String
+  region           String
+  district         String?
+  address          String
+  phone            String?
+  latitude         Decimal?          @db.Decimal(9, 6)
+  longitude        Decimal?          @db.Decimal(9, 6)
+  source           String            @default("MANUAL")
+  externalId       String?           @unique
+  sourceUrl        String?
+  isActive         Boolean           @default(true)
+  lastSyncedAt     DateTime?
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+  posts            Post[]
+  storeMenus       StoreMenu[]
+  purchaseRequests PurchaseRequest[]
+  participationPickups Participation[]
 
   @@unique([name, address])
   @@index([name])
   @@index([region])
   @@index([district])
   @@index([isActive, region, name])
+}
+
+model Menu {
+  id               String            @id @default(cuid())
+  externalId       String            @unique
+  brand            String            @default("메가MGC커피")
+  name             String
+  englishName      String?
+  category         MenuCategory
+  variant          String            @default("NONE")
+  description      String?
+  imageUrl         String?
+  source           String            @default("MANUAL")
+  sourceUrl        String?
+  isActive         Boolean           @default(true)
+  lastSyncedAt     DateTime?
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+  storeMenus       StoreMenu[]
+  purchaseRequests PurchaseRequest[]
+  participations   Participation[]
+
+  @@unique([brand, category, name, variant])
+  @@index([isActive, category, name])
+  @@index([name])
+}
+
+model StoreMenu {
+  storeId      String
+  menuId       String
+  availability MenuAvailability @default(AVAILABLE)
+  verifiedById String?
+  verifiedAt   DateTime         @default(now())
+  createdAt    DateTime         @default(now())
+  updatedAt    DateTime         @updatedAt
+  store        Store            @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  menu         Menu             @relation(fields: [menuId], references: [id], onDelete: Cascade)
+  verifiedBy   User?            @relation("StoreMenuVerifier", fields: [verifiedById], references: [id], onDelete: SetNull)
+
+  @@id([storeId, menuId])
+  @@index([menuId, availability])
+  @@index([storeId, availability])
+  @@index([verifiedById])
 }
 
 model Event {
@@ -187,45 +253,78 @@ model Post {
 }
 
 model Participation {
-  id          String              @id @default(cuid())
-  userId      String
-  postId      String
-  quantity    Int
-  pickupStore String
-  status      ParticipationStatus @default(CONFIRMED)
-  cancelledAt DateTime?
-  createdAt   DateTime            @default(now())
-  updatedAt   DateTime            @updatedAt
-  user        User                @relation(fields: [userId], references: [id], onDelete: Restrict)
-  post        Post                @relation(fields: [postId], references: [id], onDelete: Restrict)
+  id             String              @id @default(cuid())
+  userId         String
+  postId         String
+  pickupStoreId  String?
+  menuId         String?
+  quantity       Int
+  pickupStore    String
+  menu           String?
+  status         ParticipationStatus @default(CONFIRMED)
+  cancelledAt    DateTime?
+  createdAt      DateTime            @default(now())
+  updatedAt      DateTime            @updatedAt
+  user           User                @relation(fields: [userId], references: [id], onDelete: Restrict)
+  post           Post                @relation(fields: [postId], references: [id], onDelete: Restrict)
+  pickupStoreRef Store?              @relation(fields: [pickupStoreId], references: [id], onDelete: SetNull)
+  selectedMenu   Menu?               @relation(fields: [menuId], references: [id], onDelete: SetNull)
 
   @@unique([userId, postId])
   @@index([postId, status])
   @@index([userId, createdAt])
+  @@index([pickupStoreId])
+  @@index([menuId])
 }
 
 model PurchaseRequest {
-  id          String                @id @default(cuid())
-  requesterId String
-  accepterId  String?
-  city        String
-  branch      String
-  menu        String
-  quantity    Int
-  desiredTime String
-  note        String?
-  openChatUrl String
-  status      PurchaseRequestStatus @default(OPEN)
-  acceptedAt  DateTime?
-  cancelledAt DateTime?
-  createdAt   DateTime              @default(now())
-  updatedAt   DateTime              @updatedAt
-  requester   User                  @relation("PurchaseRequestRequester", fields: [requesterId], references: [id], onDelete: Restrict)
-  accepter    User?                 @relation("PurchaseRequestAccepter", fields: [accepterId], references: [id], onDelete: SetNull)
+  id           String                @id @default(cuid())
+  requesterId  String
+  accepterId   String?
+  storeId      String?
+  menuId       String?
+  city         String
+  branch       String
+  menu         String
+  quantity     Int
+  desiredTime  String
+  note         String?
+  openChatUrl  String
+  status       PurchaseRequestStatus @default(OPEN)
+  acceptedAt   DateTime?
+  cancelledAt  DateTime?
+  createdAt    DateTime              @default(now())
+  updatedAt    DateTime              @updatedAt
+  requester    User                  @relation("PurchaseRequestRequester", fields: [requesterId], references: [id], onDelete: Restrict)
+  accepter     User?                 @relation("PurchaseRequestAccepter", fields: [accepterId], references: [id], onDelete: SetNull)
+  store        Store?                @relation(fields: [storeId], references: [id], onDelete: SetNull)
+  selectedMenu Menu?                 @relation(fields: [menuId], references: [id], onDelete: SetNull)
 
   @@index([status, createdAt])
   @@index([requesterId, createdAt])
   @@index([accepterId, createdAt])
+  @@index([storeId])
+  @@index([menuId])
+}
+
+model Notification {
+  id           String           @id @default(cuid())
+  recipientId  String
+  actorId      String?
+  type         NotificationType
+  title        String
+  message      String
+  resourceType String
+  resourceId   String
+  readAt       DateTime?
+  createdAt    DateTime         @default(now())
+  recipient    User             @relation("NotificationRecipient", fields: [recipientId], references: [id], onDelete: Cascade)
+  actor        User?            @relation("NotificationActor", fields: [actorId], references: [id], onDelete: SetNull)
+
+  @@index([recipientId, createdAt])
+  @@index([recipientId, readAt, createdAt])
+  @@index([resourceType, resourceId])
+  @@index([actorId])
 }
 
 model Inquiry {

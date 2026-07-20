@@ -18,6 +18,7 @@ import { eventsRouter } from "./modules/events/events.route.js";
 import { favoritesRouter } from "./modules/favorites/favorites.route.js";
 import { healthRouter } from "./modules/health/health.route.js";
 import { inquiriesRouter } from "./modules/inquiries/inquiries.route.js";
+import { notificationsRouter } from "./modules/notifications/notifications.route.js";
 import { postsRouter } from "./modules/posts/posts.route.js";
 import { participationsRouter } from "./modules/participations/participations.route.js";
 import { purchaseRequestsRouter } from "./modules/purchase-requests/purchase-requests.route.js";
@@ -76,6 +77,7 @@ export function createApp(): express.Express {
   app.use("/api/v1/health", healthRouter);
   app.use("/api/v1/auth", authRouter);
   app.use("/api/v1/inquiries", inquiriesRouter);
+  app.use("/api/v1/notifications", notificationsRouter);
   app.use("/api/v1/users", usersRouter);
   app.use("/api/v1/stores", storesRouter);
   app.use("/api/v1/events", eventsRouter);

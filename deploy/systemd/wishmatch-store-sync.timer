@@ -1,5 +1,5 @@
 [Unit]
-Description=Weekly official Mega MGC Coffee store synchronization
+Description=Weekly official Mega MGC Coffee store and menu synchronization
 
 [Timer]
 OnCalendar=Sun *-*-* 18:00:00 UTC

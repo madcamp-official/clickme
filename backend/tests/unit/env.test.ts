@@ -35,9 +35,12 @@ describe("environment validation", () => {
     const env = parseEnv({
       ...valid(),
       CORS_ORIGINS: "http://localhost:3000,https://wish.example",
-      ADMIN_KAKAO_USER_IDS: "1, 2"
+      ADMIN_KAKAO_USER_IDS: "1, 2, legacy-user-id",
+      ADMIN_USER_IDS: "user-1, user-2"
     });
     expect(env.corsOrigins).toEqual(["http://localhost:3000", "https://wish.example"]);
     expect(env.adminKakaoUserIds.has("2")).toBe(true);
+    expect(env.adminKakaoUserIds.has("legacy-user-id")).toBe(true);
+    expect(env.adminUserIds).toEqual(new Set(["user-1", "user-2", "legacy-user-id"]));
   });
 });

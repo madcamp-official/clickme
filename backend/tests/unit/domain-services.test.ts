@@ -85,7 +85,9 @@ describe("domain services", () => {
       imageUrl: "https://wishmatch.test/api/v1/uploads/posts/new.jpg"
     });
     const posts = { create } as unknown as PostsRepository;
-    const stores = { find: vi.fn().mockResolvedValue({ id: "store" }) } as unknown as StoresRepository;
+    const stores = {
+      find: vi.fn().mockResolvedValue({ id: "store" })
+    } as unknown as StoresRepository;
     const saveImage = vi
       .fn()
       .mockResolvedValue("https://wishmatch.test/api/v1/uploads/posts/new.jpg");
@@ -121,15 +123,21 @@ describe("domain services", () => {
       find: vi.fn().mockResolvedValue({ ...basePost, imageUrl: oldImage }),
       update
     } as unknown as PostsRepository;
-    const stores = { find: vi.fn().mockResolvedValue({ id: "store" }) } as unknown as StoresRepository;
+    const stores = {
+      find: vi.fn().mockResolvedValue({ id: "store" })
+    } as unknown as StoresRepository;
     const saveImage = vi.fn().mockResolvedValue(newImage);
     const removeImage = vi.fn().mockResolvedValue(undefined);
     const images = { save: saveImage, remove: removeImage } as unknown as ImageStorage;
     const service = new PostsService(posts, stores, {} as EventsRepository, images);
 
-    await service.update("post-1", { userId: "seller", role: "USER" }, {
-      imageData: "data:image/jpeg;base64,/9j/2Q=="
-    });
+    await service.update(
+      "post-1",
+      { userId: "seller", role: "USER" },
+      {
+        imageData: "data:image/jpeg;base64,/9j/2Q=="
+      }
+    );
     expect(update).toHaveBeenNthCalledWith(
       1,
       "post-1",
@@ -174,13 +182,23 @@ describe("domain services", () => {
         deletedAt: null
       }),
       findForUser: vi.fn().mockResolvedValue(null),
+      findSelection: vi.fn().mockResolvedValue({
+        store: { id: "store", name: "강남점" },
+        menu: { id: "menu", name: "골드망고스무디" }
+      }),
       createAndReserve
     } as unknown as ParticipationsRepository;
     await new ParticipationsService(repository).create("buyer", "post-1", {
       quantity: 2,
-      pickupStore: "강남점"
+      pickupStoreId: "store",
+      menuId: "menu"
     });
-    expect(createAndReserve).toHaveBeenCalledWith("buyer", "post-1", 2, "강남점");
+    expect(createAndReserve).toHaveBeenCalledWith("buyer", "post-1", 2, {
+      pickupStoreId: "store",
+      pickupStore: "강남점",
+      menuId: "menu",
+      menu: "골드망고 스무디"
+    });
   });
 
   it("does not cancel a participation after its post has closed", async () => {
@@ -212,6 +230,73 @@ describe("domain services", () => {
     await expect(
       new PurchaseRequestsService(repository).accept("request-1", "requester")
     ).rejects.toMatchObject({ code: "SELF_ACCEPT_NOT_ALLOWED" });
+  });
+
+  it("creates a purchase request from an available store menu and stores snapshots", async () => {
+    const create = vi.fn().mockResolvedValue({ id: "request-1" });
+    const repository = {
+      findSelection: vi.fn().mockResolvedValue({
+        store: { id: "store", region: "서울", name: "홍대점" },
+        menu: { id: "menu", name: "골드망고스무디", variant: "ICE" }
+      }),
+      create
+    } as unknown as PurchaseRequestsRepository;
+
+    await new PurchaseRequestsService(repository).create("requester", {
+      storeId: "store",
+      menuId: "menu",
+      quantity: 2,
+      desiredTime: "2030.01.01 15:00 ~ 18:00",
+      openChatUrl: "https://open.kakao.com/o/example"
+    });
+
+    expect(create).toHaveBeenCalledWith(
+      "requester",
+      expect.objectContaining({
+        storeId: "store",
+        menuId: "menu",
+        city: "서울",
+        branch: "홍대점",
+        menu: "골드망고 스무디"
+      })
+    );
+  });
+
+  it("rejects a menu disabled for the selected store", async () => {
+    const repository = {
+      findSelection: vi.fn().mockResolvedValue({
+        store: { id: "store", region: "서울", name: "홍대점" },
+        menu: null
+      })
+    } as unknown as PurchaseRequestsRepository;
+    await expect(
+      new PurchaseRequestsService(repository).create("requester", {
+        storeId: "store",
+        menuId: "disabled-menu",
+        quantity: 1,
+        desiredTime: "2030.01.01 15:00 ~ 18:00",
+        openChatUrl: "https://open.kakao.com/o/example"
+      })
+    ).rejects.toMatchObject({ code: "MENU_UNAVAILABLE" });
+  });
+
+  it("allows only the requester to edit an open purchase request", async () => {
+    const updateOpen = vi.fn().mockResolvedValue({ id: "request-1", quantity: 3 });
+    const repository = {
+      find: vi.fn().mockResolvedValue({
+        id: "request-1",
+        requesterId: "requester",
+        status: "OPEN"
+      }),
+      updateOpen
+    } as unknown as PurchaseRequestsRepository;
+    const service = new PurchaseRequestsService(repository);
+
+    await service.update("request-1", "requester", { quantity: 3 });
+    expect(updateOpen).toHaveBeenCalledWith("request-1", "requester", { quantity: 3 });
+    await expect(service.update("request-1", "other", { quantity: 2 })).rejects.toMatchObject({
+      code: "PURCHASE_REQUEST_FORBIDDEN"
+    });
   });
 
   it("uses upsert/deleteMany semantics through idempotent favorite methods", async () => {
@@ -257,5 +342,28 @@ describe("domain services", () => {
     await expect(service.suspend("admin", "admin", "self")).rejects.toMatchObject({
       code: "FORBIDDEN"
     });
+  });
+
+  it("treats missing store menu overrides as available for administrators", async () => {
+    const repository = {
+      findStore: vi.fn().mockResolvedValue({ id: "store" }),
+      storeMenus: vi.fn().mockResolvedValue({
+        items: [
+          { id: "default", name: "아메리카노", storeMenus: [] },
+          {
+            id: "blocked",
+            name: "카페라떼",
+            storeMenus: [{ availability: "UNAVAILABLE" }]
+          }
+        ],
+        total: 2
+      })
+    } as unknown as AdminRepository;
+
+    const result = await new AdminService(repository).storeMenus("store", { page: 1, limit: 100 });
+    expect(result.items).toEqual([
+      expect.objectContaining({ id: "default", availability: "AVAILABLE" }),
+      expect.objectContaining({ id: "blocked", availability: "UNAVAILABLE" })
+    ]);
   });
 });

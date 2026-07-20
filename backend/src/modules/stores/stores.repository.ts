@@ -18,6 +18,30 @@ export class StoresRepository {
   find(id: string) {
     return this.db.store.findUnique({ where: { id } });
   }
+  async listMenus(storeId: string, where: Prisma.MenuWhereInput, page: number, limit: number) {
+    const availableWhere: Prisma.MenuWhereInput = {
+      ...where,
+      storeMenus: { none: { storeId, availability: "UNAVAILABLE" } }
+    };
+    const [items, total] = await Promise.all([
+      this.db.menu.findMany({
+        where: availableWhere,
+        skip: (page - 1) * limit,
+        take: limit,
+        orderBy: [{ category: "asc" }, { name: "asc" }, { variant: "asc" }],
+        select: {
+          id: true,
+          name: true,
+          englishName: true,
+          category: true,
+          variant: true,
+          imageUrl: true
+        }
+      }),
+      this.db.menu.count({ where: availableWhere })
+    ]);
+    return { items, total };
+  }
   create(data: Prisma.StoreCreateInput) {
     return this.db.store.create({ data });
   }

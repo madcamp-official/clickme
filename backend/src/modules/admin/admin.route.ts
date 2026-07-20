@@ -9,12 +9,15 @@ import { AdminController } from "./admin.controller.js";
 import {
   adminCreateEventSchema,
   adminCreateStoreSchema,
+  adminDatabaseSchema,
   adminDeletePostSchema,
   adminIdSchema,
   adminPostsSchema,
   adminReportsSchema,
   adminRestorePostSchema,
+  adminStoreMenusSchema,
   adminUpdateEventSchema,
+  adminUpdateStoreMenuSchema,
   adminUpdateStoreSchema,
   adminUsersSchema,
   handleReportSchema,
@@ -25,6 +28,8 @@ import {
 const controller = new AdminController();
 export const adminRouter = Router();
 adminRouter.use(authenticate, requireActiveUser, authorize(UserRole.ADMIN));
+adminRouter.get("/dashboard", controller.dashboard);
+adminRouter.get("/database", validate(adminDatabaseSchema), controller.database);
 adminRouter.get("/reports", validate(adminReportsSchema), controller.reports);
 adminRouter.get("/reports/:id", validate(adminIdSchema), controller.report);
 adminRouter.patch(
@@ -70,6 +75,13 @@ adminRouter.patch(
   adminMutationRateLimit,
   validate(adminUpdateStoreSchema),
   controller.updateStore
+);
+adminRouter.get("/stores/:id/menus", validate(adminStoreMenusSchema), controller.storeMenus);
+adminRouter.patch(
+  "/stores/:storeId/menus/:menuId",
+  adminMutationRateLimit,
+  validate(adminUpdateStoreMenuSchema),
+  controller.updateStoreMenu
 );
 adminRouter.post(
   "/events",

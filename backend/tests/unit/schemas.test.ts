@@ -7,9 +7,20 @@ import {
 import { createReviewSchema } from "../../src/modules/reviews/reviews.schema.js";
 import { createReportSchema } from "../../src/modules/reports/reports.schema.js";
 import { createParticipationSchema } from "../../src/modules/participations/participations.schema.js";
-import { createPurchaseRequestSchema } from "../../src/modules/purchase-requests/purchase-requests.schema.js";
+import {
+  createPurchaseRequestSchema,
+  updatePurchaseRequestSchema
+} from "../../src/modules/purchase-requests/purchase-requests.schema.js";
 import { createInquirySchema } from "../../src/modules/inquiries/inquiries.schema.js";
 import { updateProfileImageSchema } from "../../src/modules/users/users.schema.js";
+import {
+  adminDatabaseSchema,
+  adminUpdateStoreMenuSchema
+} from "../../src/modules/admin/admin.schema.js";
+import {
+  notificationIdSchema,
+  notificationListSchema
+} from "../../src/modules/notifications/notifications.schema.js";
 
 const validPost = {
   storeId: "store",
@@ -59,25 +70,24 @@ describe("request schemas", () => {
       createReportSchema.safeParse({ body: { targetPostId: "p", reason: "OTHER" } }).success
     ).toBe(false);
   });
-  it("validates participation quantity and pickup store", () => {
+  it("validates participation quantity, official pickup store, and menu", () => {
     expect(
       createParticipationSchema.safeParse({
         params: { postId: "post" },
-        body: { quantity: 2, pickupStore: "홍대점" }
+        body: { quantity: 2, pickupStoreId: "store", menuId: "menu" }
       }).success
     ).toBe(true);
     expect(
       createParticipationSchema.safeParse({
         params: { postId: "post" },
-        body: { quantity: 0, pickupStore: "" }
+        body: { quantity: 0, pickupStoreId: "", menuId: "" }
       }).success
     ).toBe(false);
   });
   it("accepts only Kakao open chat links for purchase requests", () => {
     const request = {
-      city: "서울",
-      branch: "홍대점",
-      menu: "아메리카노 1잔",
+      storeId: "store",
+      menuId: "menu",
       quantity: 1,
       desiredTime: "오늘 오후",
       openChatUrl: "https://open.kakao.com/o/example"
@@ -88,6 +98,62 @@ describe("request schemas", () => {
         body: { ...request, openChatUrl: "https://example.com/chat" }
       }).success
     ).toBe(false);
+    expect(
+      createPurchaseRequestSchema.safeParse({
+        body: { ...request, menuId: undefined }
+      }).success
+    ).toBe(false);
+  });
+  it("accepts non-empty partial purchase request updates", () => {
+    expect(
+      updatePurchaseRequestSchema.safeParse({
+        params: { id: "request" },
+        body: { quantity: 3, desiredTime: "2030.01.01 15:00 ~ 18:00" }
+      }).success
+    ).toBe(true);
+    expect(
+      updatePurchaseRequestSchema.safeParse({ params: { id: "request" }, body: {} }).success
+    ).toBe(false);
+    expect(
+      updatePurchaseRequestSchema.safeParse({
+        params: { id: "request" },
+        body: { openChatUrl: "https://example.com/chat" }
+      }).success
+    ).toBe(false);
+    expect(
+      updatePurchaseRequestSchema.safeParse({
+        params: { id: "request" },
+        body: { storeId: "store" }
+      }).success
+    ).toBe(false);
+    expect(
+      updatePurchaseRequestSchema.safeParse({
+        params: { id: "request" },
+        body: { storeId: "store", menuId: "menu" }
+      }).success
+    ).toBe(true);
+  });
+  it("allows admins to set only explicit selling or unavailable states", () => {
+    const input = {
+      params: { storeId: "store", menuId: "menu" },
+      body: { availability: "UNAVAILABLE" }
+    };
+    expect(adminUpdateStoreMenuSchema.safeParse(input).success).toBe(true);
+    expect(
+      adminUpdateStoreMenuSchema.safeParse({
+        ...input,
+        body: { availability: "UNKNOWN" }
+      }).success
+    ).toBe(false);
+  });
+  it("allows only approved read-only admin database tables", () => {
+    expect(adminDatabaseSchema.safeParse({ query: { table: "users" } }).success).toBe(true);
+    expect(adminDatabaseSchema.safeParse({ query: { table: "authSessions" } }).success).toBe(false);
+  });
+  it("validates notification pagination and ownership-scoped IDs", () => {
+    const list = notificationListSchema.parse({ query: { unreadOnly: "true", page: "2" } });
+    expect(list.query).toMatchObject({ unreadOnly: true, page: 2, limit: 50 });
+    expect(notificationIdSchema.safeParse({ params: { id: "notification-1" } }).success).toBe(true);
   });
   it("validates inquiry categories and minimum content length", () => {
     expect(

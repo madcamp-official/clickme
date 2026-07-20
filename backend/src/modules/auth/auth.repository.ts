@@ -24,6 +24,10 @@ export class AuthRepository {
     });
   }
 
+  promoteToAdmin(userId: string): Promise<User> {
+    return this.db.user.update({ where: { id: userId }, data: { role: "ADMIN" } });
+  }
+
   findPublicUser(userId: string) {
     return this.db.user.findFirst({
       where: { id: userId, deletedAt: null },

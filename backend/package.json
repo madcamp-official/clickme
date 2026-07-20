@@ -23,6 +23,7 @@
     "prisma:migrate:deploy": "prisma migrate deploy",
     "prisma:seed": "prisma db seed",
     "stores:sync": "tsx prisma/sync-mega-stores.ts",
+    "menus:sync": "tsx prisma/sync-mega-menus.ts",
     "check": "npm run prisma:generate && npm run lint && npm run typecheck && npm run test && npm run build"
   },
   "dependencies": {

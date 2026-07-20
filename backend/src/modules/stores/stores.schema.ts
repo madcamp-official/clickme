@@ -11,6 +11,17 @@ export const storeListSchema = z.object({
     })
     .strict()
 });
+export const storeMenuListSchema = z.object({
+  params: z.object({ id: z.string().min(1) }).strict(),
+  query: z
+    .object({
+      category: z.enum(["DRINK", "FOOD", "PRODUCT"]).optional(),
+      keyword: z.string().trim().min(1).optional(),
+      page: z.coerce.number().int().min(1).default(1),
+      limit: z.coerce.number().int().min(1).max(300).default(300)
+    })
+    .strict()
+});
 export const createStoreSchema = z.object({
   body: z
     .object({

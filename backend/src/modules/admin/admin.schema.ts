@@ -8,10 +8,38 @@ const pagination = {
 };
 const idParams = z.object({ id: z.string().min(1) }).strict();
 
+export const ADMIN_DATABASE_TABLES = [
+  "users",
+  "posts",
+  "participations",
+  "purchaseRequests",
+  "stores",
+  "menus",
+  "storeMenus",
+  "events",
+  "inquiries",
+  "reviews",
+  "favorites",
+  "reports",
+  "notifications",
+  "adminActions"
+] as const;
+
+export type AdminDatabaseTable = (typeof ADMIN_DATABASE_TABLES)[number];
+
 export const adminIdSchema = z.object({ params: idParams });
 export const adminReportsSchema = z.object({
   query: z
     .object({ ...pagination, status: z.enum(["PENDING", "RESOLVED", "REJECTED"]).optional() })
+    .strict()
+});
+export const adminDatabaseSchema = z.object({
+  query: z
+    .object({
+      table: z.enum(ADMIN_DATABASE_TABLES),
+      ...pagination,
+      search: z.string().trim().min(1).max(100).optional()
+    })
     .strict()
 });
 export const handleReportSchema = z.object({
@@ -67,6 +95,20 @@ export const adminUpdateStoreSchema = z.object({
     .partial()
     .refine((value) => Object.keys(value).length > 0)
     .strict()
+});
+export const adminStoreMenusSchema = z.object({
+  params: idParams,
+  query: z
+    .object({
+      ...pagination,
+      category: z.enum(["DRINK", "FOOD", "PRODUCT"]).optional(),
+      keyword: z.string().trim().min(1).optional()
+    })
+    .strict()
+});
+export const adminUpdateStoreMenuSchema = z.object({
+  params: z.object({ storeId: z.string().min(1), menuId: z.string().min(1) }).strict(),
+  body: z.object({ availability: z.enum(["AVAILABLE", "UNAVAILABLE"]) }).strict()
 });
 export const adminCreateEventSchema = createEventSchema;
 export const adminUpdateEventSchema = z.object({

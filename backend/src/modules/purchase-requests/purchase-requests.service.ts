@@ -4,8 +4,10 @@ import { toPagination } from "../../common/utils/pagination.js";
 import { PurchaseRequestsRepository } from "./purchase-requests.repository.js";
 import type {
   CreatePurchaseRequestInput,
-  PurchaseRequestListInput
+  PurchaseRequestListInput,
+  UpdatePurchaseRequestInput
 } from "./purchase-requests.schema.js";
+import { nctWishEventMenuDisplayName } from "../menus/nct-wish-event-menus.js";
 
 export class PurchaseRequestsService {
   constructor(private readonly repository = new PurchaseRequestsRepository()) {}
@@ -29,16 +31,63 @@ export class PurchaseRequestsService {
     return safeRequest;
   }
 
-  create(requesterId: string, input: CreatePurchaseRequestInput) {
+  private async selection(storeId: string, menuId: string) {
+    const selection = await this.repository.findSelection(storeId, menuId);
+    if (!selection.store) throw new AppError("STORE_NOT_FOUND", "매장을 찾을 수 없습니다.", 404);
+    if (!selection.menu)
+      throw new AppError("MENU_UNAVAILABLE", "선택한 매장에서 판매하지 않는 메뉴입니다.", 400);
+    return selection as {
+      store: NonNullable<typeof selection.store>;
+      menu: NonNullable<typeof selection.menu>;
+    };
+  }
+
+  private menuName(menu: { name: string; variant: string }) {
+    return nctWishEventMenuDisplayName(menu.name);
+  }
+
+  async create(requesterId: string, input: CreatePurchaseRequestInput) {
+    const { store, menu } = await this.selection(input.storeId, input.menuId);
     return this.repository.create(requesterId, {
-      city: input.city,
-      branch: input.branch,
-      menu: input.menu,
+      storeId: store.id,
+      menuId: menu.id,
+      city: store.region,
+      branch: store.name,
+      menu: this.menuName(menu),
       quantity: input.quantity,
       desiredTime: input.desiredTime,
       openChatUrl: input.openChatUrl,
       ...(input.note !== undefined ? { note: input.note } : {})
     });
+  }
+
+  async update(id: string, requesterId: string, input: UpdatePurchaseRequestInput) {
+    const request = await this.repository.find(id);
+    if (!request || request.status === "CANCELLED")
+      throw new AppError("PURCHASE_REQUEST_NOT_FOUND", "구매 요청을 찾을 수 없습니다.", 404);
+    if (request.requesterId !== requesterId)
+      throw new AppError("PURCHASE_REQUEST_FORBIDDEN", "요청을 수정할 권한이 없습니다.", 403);
+    if (request.status !== "OPEN")
+      throw new AppError(
+        "PURCHASE_REQUEST_ALREADY_ACCEPTED",
+        "수락된 요청은 수정할 수 없습니다.",
+        409
+      );
+    const selection =
+      input.storeId && input.menuId ? await this.selection(input.storeId, input.menuId) : null;
+    const data = Object.fromEntries(
+      Object.entries(input).filter(
+        ([key, value]) => key !== "storeId" && key !== "menuId" && value !== undefined
+      )
+    ) as Prisma.PurchaseRequestUncheckedUpdateManyInput;
+    if (selection) {
+      data.storeId = selection.store.id;
+      data.menuId = selection.menu.id;
+      data.city = selection.store.region;
+      data.branch = selection.store.name;
+      data.menu = this.menuName(selection.menu);
+    }
+    return this.repository.updateOpen(id, requesterId, data);
   }
 
   async accept(id: string, userId: string) {

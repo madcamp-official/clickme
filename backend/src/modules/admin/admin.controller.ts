@@ -2,9 +2,25 @@ import type { Request, Response } from "express";
 import type { Prisma, ReportStatus } from "../../generated/prisma/client.js";
 import { ok } from "../../common/types/api.js";
 import { AdminService } from "./admin.service.js";
+import type { AdminDatabaseTable } from "./admin.schema.js";
 
 export class AdminController {
   constructor(private readonly service = new AdminService()) {}
+  dashboard = async (_req: Request, res: Response): Promise<void> => {
+    res.json(ok(await this.service.dashboard()));
+  };
+  database = async (req: Request, res: Response): Promise<void> => {
+    res.json(
+      ok(
+        await this.service.database(
+          req.query.table as AdminDatabaseTable,
+          typeof req.query.search === "string" ? req.query.search : undefined,
+          Number(req.query.page),
+          Number(req.query.limit)
+        )
+      )
+    );
+  };
   reports = async (req: Request, res: Response): Promise<void> => {
     res.json(
       ok(
@@ -89,6 +105,34 @@ export class AdminController {
         await this.service.updateStore(
           req.params.id as string,
           req.body as Prisma.StoreUpdateInput,
+          req.auth!.userId
+        )
+      )
+    );
+  };
+  storeMenus = async (req: Request, res: Response): Promise<void> => {
+    const { category, keyword } = req.query;
+    res.json(
+      ok(
+        await this.service.storeMenus(req.params.id as string, {
+          ...(typeof category === "string"
+            ? { category: category as "DRINK" | "FOOD" | "PRODUCT" }
+            : {}),
+          ...(typeof keyword === "string" ? { keyword } : {}),
+          page: Number(req.query.page),
+          limit: Number(req.query.limit)
+        })
+      )
+    );
+  };
+  updateStoreMenu = async (req: Request, res: Response): Promise<void> => {
+    const body = req.body as { availability: "AVAILABLE" | "UNAVAILABLE" };
+    res.json(
+      ok(
+        await this.service.updateStoreMenu(
+          req.params.storeId as string,
+          req.params.menuId as string,
+          body.availability,
           req.auth!.userId
         )
       )

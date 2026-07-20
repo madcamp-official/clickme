@@ -1,6 +1,7 @@
 import type { RequestHandler } from "express";
-import { UserStatus } from "../../generated/prisma/enums.js";
+import { UserRole, UserStatus } from "../../generated/prisma/enums.js";
 import { cookieNames } from "../../config/cookies.js";
+import { isConfiguredAdminUser } from "../../config/env.js";
 import { prisma } from "../../infrastructure/prisma/client.js";
 import { AppError } from "../errors/AppError.js";
 import { verifyAccessToken } from "../utils/jwt.js";
@@ -32,7 +33,12 @@ export const authenticate: RequestHandler = async (req, _res, next) => {
     if (session.user.status !== UserStatus.ACTIVE || session.user.deletedAt) {
       throw new AppError("USER_SUSPENDED", "이용할 수 없는 사용자입니다.", 403);
     }
-    req.auth = { userId: session.userId, sessionId: session.id, role: session.user.role };
+    let effectiveRole = session.user.role;
+    if (effectiveRole !== UserRole.ADMIN && isConfiguredAdminUser(session.user)) {
+      await prisma.user.update({ where: { id: session.userId }, data: { role: UserRole.ADMIN } });
+      effectiveRole = UserRole.ADMIN;
+    }
+    req.auth = { userId: session.userId, sessionId: session.id, role: effectiveRole };
     next();
   } catch (error) {
     next(error);

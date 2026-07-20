@@ -2,6 +2,7 @@ import { AppError } from "../../common/errors/AppError.js";
 import { toPagination } from "../../common/utils/pagination.js";
 import { ParticipationsRepository } from "./participations.repository.js";
 import type { CreateParticipationInput } from "./participations.schema.js";
+import { nctWishEventMenuDisplayName } from "../menus/nct-wish-event-menus.js";
 
 export class ParticipationsService {
   constructor(private readonly repository = new ParticipationsRepository()) {}
@@ -24,7 +25,16 @@ export class ParticipationsService {
       );
     if (await this.repository.findForUser(userId, postId))
       throw new AppError("PARTICIPATION_ALREADY_EXISTS", "이미 참여한 모집입니다.", 409);
-    return this.repository.createAndReserve(userId, postId, input.quantity, input.pickupStore);
+    const selection = await this.repository.findSelection(input.pickupStoreId, input.menuId);
+    if (!selection.store) throw new AppError("STORE_NOT_FOUND", "매장을 찾을 수 없습니다.", 404);
+    if (!selection.menu)
+      throw new AppError("MENU_UNAVAILABLE", "선택한 매장에서 판매하지 않는 메뉴입니다.", 400);
+    return this.repository.createAndReserve(userId, postId, input.quantity, {
+      pickupStoreId: selection.store.id,
+      pickupStore: selection.store.name,
+      menuId: selection.menu.id,
+      menu: nctWishEventMenuDisplayName(selection.menu.name)
+    });
   }
 
   async cancel(userId: string, id: string) {

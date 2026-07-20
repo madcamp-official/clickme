@@ -19,6 +19,7 @@ tags:
   - name: Participations
   - name: PurchaseRequests
   - name: Inquiries
+  - name: Notifications
   - name: Reports
   - name: Admin
   - name: Health
@@ -49,6 +50,31 @@ paths:
       responses:
         "200": { $ref: "#/components/responses/Success" }
         "503": { $ref: "#/components/responses/Error" }
+  /api/v1/notifications:
+    get:
+      tags: [Notifications]
+      summary: 내 알림 목록 및 읽지 않은 알림 수
+      security: [{ bearerAuth: [] }, { accessCookie: [] }]
+      parameters:
+        - { name: unreadOnly, in: query, schema: { type: boolean, default: false } }
+        - { $ref: "#/components/parameters/Page" }
+        - { $ref: "#/components/parameters/Limit" }
+      responses: { "200": { $ref: "#/components/responses/List" } }
+  /api/v1/notifications/read-all:
+    patch:
+      tags: [Notifications]
+      summary: 내 모든 알림 읽음 처리
+      security: [{ bearerAuth: [] }, { accessCookie: [] }]
+      responses: { "200": { $ref: "#/components/responses/Success" } }
+  /api/v1/notifications/{id}/read:
+    patch:
+      tags: [Notifications]
+      summary: 내 알림 한 건 읽음 처리
+      security: [{ bearerAuth: [] }, { accessCookie: [] }]
+      parameters: [{ $ref: "#/components/parameters/Id" }]
+      responses:
+        "200": { $ref: "#/components/responses/Success" }
+        "404": { $ref: "#/components/responses/Error" }
   /api/v1/auth/kakao/start:
     get:
       tags: [Auth]
@@ -132,7 +158,7 @@ paths:
                 imageData:
                   type: string
                   maxLength: 95000
-                  pattern: '^data:image/(?:jpeg|png|webp);base64,[A-Za-z0-9+/=]+$'
+                  pattern: "^data:image/(?:jpeg|png|webp);base64,[A-Za-z0-9+/=]+$"
       responses:
         "200": { $ref: "#/components/responses/Success" }
         "400": { $ref: "#/components/responses/Error" }
@@ -191,6 +217,24 @@ paths:
       parameters: [{ $ref: "#/components/parameters/Id" }]
       responses:
         "200": { $ref: "#/components/responses/Success" }
+        "404": { $ref: "#/components/responses/Error" }
+  /api/v1/stores/{id}/menus:
+    get:
+      tags: [Stores]
+      summary: 매장에서 주문 가능한 NCT WISH 이벤트 메뉴
+      description: NCT WISH 프리퀀시 대상 10종 중 해당 매장에서 판매 중인 메뉴만 반환하며 판매 가능 여부 상태값은 응답에 노출하지 않습니다.
+      parameters:
+        - { $ref: "#/components/parameters/Id" }
+        - { name: category, in: query, schema: { $ref: "#/components/schemas/MenuCategory" } }
+        - { name: keyword, in: query, schema: { type: string } }
+        - { $ref: "#/components/parameters/Page" }
+        - {
+            name: limit,
+            in: query,
+            schema: { type: integer, minimum: 1, maximum: 300, default: 300 }
+          }
+      responses:
+        "200": { $ref: "#/components/responses/MenuList" }
         "404": { $ref: "#/components/responses/Error" }
   /api/v1/events:
     get:
@@ -407,6 +451,20 @@ paths:
       security: [{ bearerAuth: [] }, { accessCookie: [] }]
       parameters: [{ $ref: "#/components/parameters/Id" }]
       responses: { "200": { $ref: "#/components/responses/Success" } }
+    patch:
+      tags: [PurchaseRequests]
+      summary: 대기 중인 내 구매 요청 수정
+      security: [{ bearerAuth: [] }, { accessCookie: [] }]
+      parameters: [{ $ref: "#/components/parameters/Id" }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/PurchaseRequestUpdate" }
+      responses:
+        "200": { $ref: "#/components/responses/Success" }
+        "403": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
     delete:
       tags: [PurchaseRequests]
       summary: 구매 요청 취소
@@ -435,6 +493,33 @@ paths:
       responses:
         "201": { $ref: "#/components/responses/Success" }
         "409": { $ref: "#/components/responses/Error" }
+  /api/v1/admin/dashboard:
+    get:
+      tags: [Admin]
+      summary: 관리자 핵심 지표와 최근 작업
+      security: [{ bearerAuth: [] }, { accessCookie: [] }]
+      responses:
+        "200": { $ref: "#/components/responses/Success" }
+        "403": { $ref: "#/components/responses/Error" }
+  /api/v1/admin/database:
+    get:
+      tags: [Admin]
+      summary: 허용된 비민감 DB 테이블 읽기 전용 조회
+      description: 인증 세션, 카카오 식별자, 오픈채팅 URL은 조회 대상에서 제외됩니다.
+      security: [{ bearerAuth: [] }, { accessCookie: [] }]
+      parameters:
+        - name: table
+          in: query
+          required: true
+          schema:
+            type: string
+            enum: [users, posts, participations, purchaseRequests, stores, menus, storeMenus, events, inquiries, reviews, favorites, reports, notifications, adminActions]
+        - { name: search, in: query, schema: { type: string, maxLength: 100 } }
+        - { $ref: "#/components/parameters/Page" }
+        - { $ref: "#/components/parameters/Limit" }
+      responses:
+        "200": { $ref: "#/components/responses/List" }
+        "403": { $ref: "#/components/responses/Error" }
   /api/v1/admin/reports:
     get:
       tags: [Admin]
@@ -542,6 +627,43 @@ paths:
       parameters: [{ $ref: "#/components/parameters/Id" }]
       requestBody: { $ref: "#/components/requestBodies/StoreUpdate" }
       responses: { "200": { $ref: "#/components/responses/Success" } }
+  /api/v1/admin/stores/{id}/menus:
+    get:
+      tags: [Admin]
+      summary: 매장별 공식 메뉴 판매 상태 조회
+      description: 별도 상태가 없는 공식 메뉴는 기본값 AVAILABLE로 반환합니다.
+      security: [{ bearerAuth: [] }, { accessCookie: [] }]
+      parameters:
+        - { $ref: "#/components/parameters/Id" }
+        - { name: category, in: query, schema: { $ref: "#/components/schemas/MenuCategory" } }
+        - { name: keyword, in: query, schema: { type: string } }
+        - { $ref: "#/components/parameters/Page" }
+        - { $ref: "#/components/parameters/Limit" }
+      responses:
+        "200": { $ref: "#/components/responses/List" }
+        "404": { $ref: "#/components/responses/Error" }
+  /api/v1/admin/stores/{storeId}/menus/{menuId}:
+    patch:
+      tags: [Admin]
+      summary: 매장별 메뉴 판매 여부 변경
+      description: AVAILABLE로 되돌리면 별도 재고 설정을 삭제하고 기본 판매 상태를 적용합니다.
+      security: [{ bearerAuth: [] }, { accessCookie: [] }]
+      parameters:
+        - { name: storeId, in: path, required: true, schema: { type: string } }
+        - { name: menuId, in: path, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [availability]
+              properties:
+                availability: { type: string, enum: [AVAILABLE, UNAVAILABLE] }
+      responses:
+        "200": { $ref: "#/components/responses/Success" }
+        "404": { $ref: "#/components/responses/Error" }
   /api/v1/admin/events:
     post:
       tags: [Admin]
@@ -578,6 +700,32 @@ components:
     PostStatus: { type: string, enum: [OPEN, CLOSED] }
     ReportReason: { type: string, enum: [FRAUD, NO_SHOW, ABUSE, OTHER] }
     ReportStatus: { type: string, enum: [PENDING, RESOLVED, REJECTED] }
+    MenuCategory: { type: string, enum: [DRINK, FOOD, PRODUCT] }
+    Menu:
+      type: object
+      required: [id, name, category, variant, imageUrl, eventGroup, eventOrder]
+      properties:
+        id: { type: string }
+        name: { type: string }
+        englishName: { type: [string, "null"] }
+        category: { $ref: "#/components/schemas/MenuCategory" }
+        variant: { type: string, enum: [NONE, HOT, ICE] }
+        imageUrl: { type: [string, "null"], format: uri }
+        eventGroup: { type: string, enum: [MISSION, GENERAL] }
+        eventOrder: { type: integer, minimum: 1, maximum: 10 }
+    MenuList:
+      type: object
+      required: [success, data]
+      properties:
+        success: { type: boolean, const: true }
+        data:
+          type: object
+          required: [items, pagination]
+          properties:
+            items:
+              type: array
+              items: { $ref: "#/components/schemas/Menu" }
+            pagination: { $ref: "#/components/schemas/Pagination" }
     Pagination:
       type: object
       required: [page, limit, total, totalPages, hasNext]
@@ -635,7 +783,7 @@ components:
         imageData:
           type: string
           maxLength: 430000
-          pattern: '^data:image/(jpeg|png|webp);base64,'
+          pattern: "^data:image/(jpeg|png|webp);base64,"
           description: 브라우저에서 압축한 대표 사진 data URL. imageUrl과 동시에 지정할 수 없습니다.
     ReviewCreate:
       type: object
@@ -648,18 +796,34 @@ components:
     ParticipationCreate:
       type: object
       additionalProperties: false
-      required: [quantity, pickupStore]
+      required: [quantity, pickupStoreId, menuId]
       properties:
         quantity: { type: integer, minimum: 1, maximum: 30 }
-        pickupStore: { type: string, minLength: 1, maxLength: 100 }
+        pickupStoreId:
+          type: string
+          description: 공식 매장 목록에서 선택한 픽업 매장 ID
+        menuId:
+          type: string
+          description: 해당 매장에서 선택 가능한 이벤트 메뉴 ID
     PurchaseRequestCreate:
       type: object
       additionalProperties: false
-      required: [city, branch, menu, quantity, desiredTime, openChatUrl]
+      required: [storeId, menuId, quantity, desiredTime, openChatUrl]
       properties:
-        city: { type: string, minLength: 1, maxLength: 50 }
-        branch: { type: string, minLength: 1, maxLength: 100 }
-        menu: { type: string, minLength: 1, maxLength: 200 }
+        storeId: { type: string }
+        menuId: { type: string }
+        quantity: { type: integer, minimum: 1, maximum: 30 }
+        desiredTime: { type: string, minLength: 1, maxLength: 100 }
+        note: { type: [string, "null"], maxLength: 500 }
+        openChatUrl: { type: string, format: uri, pattern: '^https://open\\.kakao\\.com/' }
+    PurchaseRequestUpdate:
+      type: object
+      additionalProperties: false
+      minProperties: 1
+      description: 매장 또는 메뉴를 바꿀 때는 storeId와 menuId를 함께 전달해야 합니다.
+      properties:
+        storeId: { type: string }
+        menuId: { type: string }
         quantity: { type: integer, minimum: 1, maximum: 30 }
         desiredTime: { type: string, minLength: 1, maxLength: 100 }
         note: { type: [string, "null"], maxLength: 500 }
@@ -709,6 +873,9 @@ components:
     List:
       description: 페이지 목록
       content: { application/json: { schema: { $ref: "#/components/schemas/List" } } }
+    MenuList:
+      description: 매장에서 주문 가능한 메뉴 목록
+      content: { application/json: { schema: { $ref: "#/components/schemas/MenuList" } } }
     Error:
       description: 오류
       content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }

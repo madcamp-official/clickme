@@ -5,6 +5,7 @@ import {
   MessageCircle, PenSquare, Clock, MapPin, ChevronDown, Megaphone,
   BookOpen, Gift, SlidersHorizontal, Store,
   Users, ExternalLink, ChevronUp, Phone, ImagePlus, Trash2,
+  Database, LayoutDashboard, RefreshCw,
 } from "lucide-react";
 import nctWishChar from "@/imports/__.png";
 import nctWishLogo from "@/imports/image-1.png";
@@ -18,6 +19,13 @@ import {
   type ApiEvent,
   type ApiInquiry,
   type ApiInquiryCategory,
+  type ApiMenu,
+  type ApiMenuCategory,
+  type ApiAdminStoreMenu,
+  type ApiAdminDashboard,
+  type ApiAdminDatabasePage,
+  type ApiAdminDatabaseTable,
+  type ApiNotification,
   type ApiPost,
   type ApiPurchaseRequest,
   type ApiReview,
@@ -87,7 +95,10 @@ interface Review {
 interface Participation {
   id: string;
   dealId: string | number;
+  pickupStoreId: string | null;
+  menuId: string | null;
   pickupStore: string;
+  menu: string | null;
   qty: number;
   orderedAt: string;
   received: boolean;
@@ -98,6 +109,8 @@ type RequestStatus = "대기중" | "수락됨";
 interface BuyRequest {
   id: string | number;
   requesterId?: string;
+  storeId?: string | null;
+  menuId?: string | null;
   requester: { name: string; avatar: string };
   city: string;
   branch: string;
@@ -175,6 +188,8 @@ function requestFromApi(request: ApiPurchaseRequest): BuyRequest {
   return {
     id: request.id,
     requesterId: request.requesterId,
+    storeId: request.storeId,
+    menuId: request.menuId,
     requester: {
       name: request.requester.nickname,
       avatar: request.requester.profileImage ?? nctWishLogo,
@@ -270,19 +285,22 @@ function LoginScreen({ errorCode }: { errorCode?: string | null }) {
 // ─────────────────────────────────────────────────────────────────────────────
 type FilterType = "전체" | "모집중" | "오늘 마감";
 
-function ListScreen({ deals, onSelect, onLike, requests, onRequestSelect }: {
+function ListScreen({ deals, onSelect, onLike, requests, onRequestSelect, initialBoard = "deals" }: {
   deals: Deal[];
   onSelect: (d: Deal) => void;
   onLike: (id: Deal["id"]) => void;
   requests: BuyRequest[];
   onRequestSelect: (r: BuyRequest) => void;
+  initialBoard?: "deals" | "requests";
 }) {
-  const [board, setBoard] = useState<"deals" | "requests">("deals");
+  const [board, setBoard] = useState<"deals" | "requests">(initialBoard);
   const [filter, setFilter]   = useState<FilterType>("전체");
   const [sortOpen, setSortOpen] = useState(false);
   const [sort, setSort]       = useState<"오늘 마감" | "할인 높은순" | "최신 등록순">("최신 등록순");
   const [discFilter, setDiscFilter] = useState("전체");
   const [filterOpen, setFilterOpen] = useState(false);
+
+  useEffect(() => setBoard(initialBoard), [initialBoard]);
 
   const filtered = deals
     .filter(d => filter === "전체" || filter === "오늘 마감" || d.status !== "마감")
@@ -470,7 +488,12 @@ function RequestCard({ request, onTap }: { request: BuyRequest; onTap: () => voi
           {request.status}
         </span>
       </div>
-      <p className="text-sm font-black text-gray-900 mt-1">{request.menu}</p>
+      <div className="flex items-center gap-2 mt-1">
+        <p className="text-sm font-black text-gray-900 truncate">{request.menu}</p>
+        <span className="flex-shrink-0 rounded-full bg-yellow-50 px-2 py-0.5 text-[10px] font-black text-amber-700">
+          {request.qty}잔
+        </span>
+      </div>
       <p className="text-xs text-gray-400 mt-1">{request.desiredTime}</p>
       <div className="flex items-center gap-1.5 mt-2 pt-2 border-t border-gray-50">
         <img src={request.requester.avatar} alt={request.requester.name} className="w-4 h-4 rounded-full object-cover flex-shrink-0" />
@@ -481,13 +504,14 @@ function RequestCard({ request, onTap }: { request: BuyRequest; onTap: () => voi
   );
 }
 
-function RequestDetailScreen({ request, canAccept, canCancel, onBack, onAccept, onCancel }: {
+function RequestDetailScreen({ request, canAccept, canCancel, onBack, onAccept, onCancel, onEdit }: {
   request: BuyRequest;
   canAccept: boolean;
   canCancel: boolean;
   onBack: () => void;
   onAccept: () => Promise<void>;
   onCancel: () => Promise<void>;
+  onEdit?: () => void;
 }) {
   const isAccepted = request.status === "수락됨";
   const [accepting, setAccepting] = useState(false);
@@ -555,6 +579,10 @@ function RequestDetailScreen({ request, canAccept, canCancel, onBack, onAccept, 
             <span className="font-bold text-gray-800">{request.menu}</span>
           </div>
           <div className="flex justify-between text-sm">
+            <span className="text-gray-400">수량</span>
+            <span className="font-bold text-gray-800">{request.qty}잔</span>
+          </div>
+          <div className="flex justify-between text-sm">
             <span className="text-gray-400">희망 시간</span>
             <span className="font-bold text-gray-800">{request.desiredTime}</span>
           </div>
@@ -597,10 +625,18 @@ function RequestDetailScreen({ request, canAccept, canCancel, onBack, onAccept, 
             </button>
           )}
           {canCancel && (
-            <button onClick={cancel} disabled={accepting || cancelling}
-              className="w-full border border-red-100 bg-red-50 text-red-500 rounded-2xl py-3.5 font-black text-sm disabled:opacity-50">
-              {cancelling ? "취소 중..." : "내 요청 취소하기"}
-            </button>
+            <div className="flex gap-2">
+              {onEdit && (
+                <button type="button" onClick={onEdit} disabled={accepting || cancelling}
+                  className="flex-1 flex items-center justify-center gap-1.5 border border-purple-100 bg-purple-50 text-primary rounded-2xl py-3.5 font-black text-sm disabled:opacity-50">
+                  <PenSquare className="w-4 h-4" /> 수정하기
+                </button>
+              )}
+              <button onClick={cancel} disabled={accepting || cancelling}
+                className="flex-1 border border-red-100 bg-red-50 text-red-500 rounded-2xl py-3.5 font-black text-sm disabled:opacity-50">
+                {cancelling ? "취소 중..." : "요청 취소"}
+              </button>
+            </div>
           )}
         </div>
       )}
@@ -608,36 +644,316 @@ function RequestDetailScreen({ request, canAccept, canCancel, onBack, onAccept, 
   );
 }
 
-const REQUEST_MENU_OPTIONS = [
-  "저당 꿀배 XO야쿠르트",
-  "골드망고 스무디",
-  "초코허니 퐁크러쉬",
-  "밀크쉐이크",
-  "메가베리 아사이볼",
-  "망고요거트 스무디",
-  "제로 부스트 에이드",
-  "메가리카노",
-  "코코넛 커피 스무디",
-  "흑당 밀크티 라떼",
-] as const;
+const MENU_CATEGORY_LABELS: Record<ApiMenuCategory, string> = {
+  DRINK: "음료",
+  FOOD: "푸드",
+  PRODUCT: "상품",
+};
 
-function RequestPostScreen({ onBack, stores, onSubmit }: {
+type EventMenuGroup = "MISSION" | "GENERAL";
+
+const EVENT_MENU_GROUP_LABELS: Record<EventMenuGroup, string> = {
+  MISSION: "미션 메뉴",
+  GENERAL: "일반 메뉴",
+};
+
+function eventMenuGroup(menu: ApiMenu): EventMenuGroup {
+  return menu.eventGroup ?? "GENERAL";
+}
+
+function menuDisplayName(menu: Pick<ApiMenu, "name" | "variant">): string {
+  return menu.variant === "NONE" ? menu.name : `${menu.name} (${menu.variant})`;
+}
+
+function MenuPickerScreen({
+  menus,
+  selectedId,
+  storeName,
+  onBack,
+  onSelect,
+}: {
+  menus: ApiMenu[];
+  selectedId: string;
+  storeName: string;
   onBack: () => void;
-  stores: ApiStore[];
-  onSubmit: (req: Omit<BuyRequest, "id" | "requester" | "status" | "createdAt">) => Promise<void>;
+  onSelect: (menu: ApiMenu) => void;
 }) {
-  const [selectedStore, setSelectedStore] = useState<ApiStore | null>(null);
+  const [keyword, setKeyword] = useState("");
+  const [group, setGroup] = useState<"" | EventMenuGroup>("");
+  const [draftId, setDraftId] = useState(selectedId);
+  const normalizedKeyword = keyword.trim().toLocaleLowerCase("ko");
+  const visibleMenus = menus.filter((menu) => {
+    if (group && eventMenuGroup(menu) !== group) return false;
+    if (!normalizedKeyword) return true;
+    return `${menu.name} ${menu.englishName ?? ""}`
+      .toLocaleLowerCase("ko")
+      .includes(normalizedKeyword);
+  });
+  const draftMenu = menus.find((menu) => menu.id === draftId) ?? null;
+
+  function confirmSelection() {
+    if (!draftMenu) return;
+    onSelect(draftMenu);
+  }
+
+  return (
+    <div className="relative flex flex-col h-full bg-[#F8F6FF]">
+      <div className="flex items-center px-4 py-3 bg-white border-b border-gray-100 flex-shrink-0">
+        <button type="button" onClick={onBack}
+          className="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center"
+          aria-label="메뉴 선택 닫기">
+          <ArrowLeft className="w-4 h-4 text-gray-700" />
+        </button>
+        <div className="flex-1 min-w-0 text-center -ml-8 pointer-events-none">
+          <p className="font-black text-sm text-gray-900">사진으로 메뉴 선택</p>
+          <p className="mt-0.5 truncate px-10 text-[10px] font-semibold text-gray-400">{storeName}</p>
+        </div>
+      </div>
+
+      <div className="flex-shrink-0 space-y-3 border-b border-gray-100 bg-white px-3 py-3">
+        <div className="relative">
+          <Search className="absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-300" />
+          <input
+            type="search"
+            value={keyword}
+            onChange={(event) => setKeyword(event.target.value)}
+            placeholder="메뉴 이름으로 검색"
+            aria-label="메뉴 검색"
+            className="w-full rounded-2xl border border-gray-100 bg-gray-50 py-3.5 pl-11 pr-10 text-sm outline-none focus:border-primary"
+          />
+          {keyword && (
+            <button type="button" onClick={() => setKeyword("")} aria-label="메뉴 검색어 지우기"
+              className="absolute right-3 top-1/2 flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-full bg-gray-200/70">
+              <X className="h-3.5 w-3.5 text-gray-400" />
+            </button>
+          )}
+        </div>
+        <div className="flex gap-1.5 overflow-x-auto pb-0.5" aria-label="이벤트 메뉴 구분">
+          {(["", "MISSION", "GENERAL"] as const).map((value) => (
+            <button key={value || "ALL"} type="button" onClick={() => setGroup(value)}
+              aria-pressed={group === value}
+              className={`flex-shrink-0 rounded-full px-3.5 py-2 text-xs font-black transition-colors ${
+                group === value
+                  ? "bg-primary text-white"
+                  : "border border-gray-100 bg-white text-gray-500"
+              }`}>
+              {value
+                ? `${EVENT_MENU_GROUP_LABELS[value]} ${menus.filter((menu) => eventMenuGroup(menu) === value).length}종`
+                : `전체 ${menus.length}종`}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div className="flex-1 overflow-y-auto px-3 py-3 pb-28">
+        <p className="mb-2 px-1 text-[11px] font-semibold text-gray-400">
+          사진을 눌러 메뉴를 선택해주세요 · {visibleMenus.length}개
+        </p>
+        {visibleMenus.length === 0 ? (
+          <div className="flex flex-col items-center justify-center gap-2 rounded-2xl bg-white py-16 text-center">
+            <Search className="h-9 w-9 text-gray-200" />
+            <p className="text-sm font-bold text-gray-400">검색된 메뉴가 없어요.</p>
+            <p className="text-xs text-gray-300">검색어나 카테고리를 바꿔보세요.</p>
+          </div>
+        ) : (
+          <div className="grid grid-cols-2 gap-2.5" role="radiogroup" aria-label="판매 메뉴">
+            {visibleMenus.map((menu) => {
+              const selected = menu.id === draftId;
+              return (
+                <button
+                  key={menu.id}
+                  type="button"
+                  role="radio"
+                  aria-checked={selected}
+                  onClick={() => setDraftId(menu.id)}
+                  className={`relative overflow-hidden rounded-2xl border bg-white text-left shadow-sm transition-all active:scale-[0.98] ${
+                    selected
+                      ? "border-primary ring-2 ring-primary/15"
+                      : "border-gray-100"
+                  }`}
+                >
+                  <div className="relative aspect-square overflow-hidden bg-white">
+                    {menu.imageUrl ? (
+                      <ImageWithFallback
+                        src={menu.imageUrl}
+                        alt={menuDisplayName(menu)}
+                        loading="lazy"
+                        decoding="async"
+                        className="h-full w-full object-contain p-2"
+                      />
+                    ) : (
+                      <div className="flex h-full w-full items-center justify-center bg-gray-50 text-4xl" aria-hidden="true">☕</div>
+                    )}
+                    <span className="absolute left-2 top-2 rounded-full bg-black/55 px-2 py-1 text-[9px] font-black text-white backdrop-blur-sm">
+                      {EVENT_MENU_GROUP_LABELS[eventMenuGroup(menu)]}
+                    </span>
+                    {selected && (
+                      <span className="absolute right-2 top-2 flex h-7 w-7 items-center justify-center rounded-full bg-primary text-white shadow-md">
+                        <CheckCircle className="h-4 w-4" />
+                      </span>
+                    )}
+                  </div>
+                  <div className="min-h-[70px] border-t border-gray-50 px-3 py-2.5">
+                    <p className="line-clamp-2 text-xs font-black leading-snug text-gray-900">{menuDisplayName(menu)}</p>
+                    {menu.englishName && (
+                      <p className="mt-1 truncate text-[9px] font-medium text-gray-400">{menu.englishName}</p>
+                    )}
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
+      <div className="absolute bottom-0 left-0 right-0 border-t border-gray-100 bg-white/95 px-3 py-3 backdrop-blur-sm">
+        {draftMenu ? (
+          <div className="flex items-center gap-2.5">
+            <div className="h-12 w-12 flex-shrink-0 overflow-hidden rounded-xl border border-gray-100 bg-white">
+              {draftMenu.imageUrl ? (
+                <ImageWithFallback src={draftMenu.imageUrl} alt="" className="h-full w-full object-contain p-1" />
+              ) : (
+                <div className="flex h-full w-full items-center justify-center" aria-hidden="true">☕</div>
+              )}
+            </div>
+            <div className="min-w-0 flex-1">
+              <p className="text-[10px] font-bold text-primary">선택한 메뉴</p>
+              <p className="truncate text-xs font-black text-gray-900">{menuDisplayName(draftMenu)}</p>
+            </div>
+            <button type="button" onClick={confirmSelection}
+              className="flex-shrink-0 rounded-xl bg-primary px-5 py-3 text-sm font-black text-white">
+              선택 완료
+            </button>
+          </div>
+        ) : (
+          <button type="button" disabled
+            className="w-full rounded-2xl bg-primary py-4 text-sm font-black text-white opacity-40">
+            메뉴를 선택해주세요
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+interface RequestFormValue {
+  storeId: string;
+  menuId: string;
+  qty: number;
+  desiredTime: string;
+  note: string;
+  kakaoLink: string;
+}
+
+function seoulDateInputValue(daysFromToday = 0): string {
+  const date = new Date(Date.now() + daysFromToday * 24 * 60 * 60_000);
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Seoul",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(date);
+  const part = (type: Intl.DateTimeFormatPartTypes) =>
+    parts.find((item) => item.type === type)?.value ?? "";
+  return `${part("year")}-${part("month")}-${part("day")}`;
+}
+
+function parseDesiredTime(value: string): { date: string; timeFrom: string; timeTo: string } | null {
+  const matched = /^(\d{4})\.(\d{2})\.(\d{2}) (\d{2}:\d{2}) ~ (\d{2}:\d{2})$/.exec(value);
+  if (!matched) return null;
+  return {
+    date: `${matched[1]}-${matched[2]}-${matched[3]}`,
+    timeFrom: matched[4] as string,
+    timeTo: matched[5] as string,
+  };
+}
+
+function isOpenKakaoUrl(value: string): boolean {
+  try {
+    const url = new URL(value);
+    return url.protocol === "https:" && url.hostname === "open.kakao.com";
+  } catch {
+    return false;
+  }
+}
+
+function RequestPostScreen({ onBack, onComplete, stores, initialRequest, onSubmit }: {
+  onBack: () => void;
+  onComplete?: () => void;
+  stores: ApiStore[];
+  initialRequest?: BuyRequest;
+  onSubmit: (req: RequestFormValue) => Promise<void>;
+}) {
+  const mode = initialRequest ? "edit" : "create";
+  const parsedDesiredTime = initialRequest ? parseDesiredTime(initialRequest.desiredTime) : null;
+  const initialStore = stores.find((store) =>
+    initialRequest?.storeId
+      ? store.id === initialRequest.storeId
+      : store.name === initialRequest?.branch && store.region === initialRequest?.city
+  ) ?? null;
+  const [storeId, setStoreId] = useState(initialRequest?.storeId ?? initialStore?.id ?? "");
+  const [selectedStore, setSelectedStore] = useState<ApiStore | null>(initialStore);
   const [storePickerOpen, setStorePickerOpen] = useState(false);
-  const [menu,        setMenu]        = useState("");
-  const [qty,         setQty]         = useState(1);
-  const [desiredTime, setDesiredTime] = useState("");
-  const [note,        setNote]        = useState("");
-  const [kakao,       setKakao]       = useState("");
+  const [menuPickerOpen, setMenuPickerOpen] = useState(false);
+  const [menus, setMenus] = useState<ApiMenu[]>([]);
+  const [menuId, setMenuId] = useState(initialRequest?.menuId ?? "");
+  const [menusLoading, setMenusLoading] = useState(false);
+  const [menusError, setMenusError] = useState<string | null>(null);
+  const [menuReloadKey, setMenuReloadKey] = useState(0);
+  const [qty,         setQty]         = useState(initialRequest?.qty ?? 1);
+  const [date,        setDate]        = useState(parsedDesiredTime?.date ?? seoulDateInputValue(1));
+  const [timeFrom,    setTimeFrom]    = useState(parsedDesiredTime?.timeFrom ?? "");
+  const [timeTo,      setTimeTo]      = useState(parsedDesiredTime?.timeTo ?? "");
+  const [note,        setNote]        = useState(initialRequest?.note ?? "");
+  const [kakao,       setKakao]       = useState(initialRequest?.kakaoLink ?? "");
   const [done,        setDone]        = useState(false);
   const [submitting,  setSubmitting]  = useState(false);
   const [error,       setError]       = useState<string | null>(null);
 
-  const canSubmit = Boolean(selectedStore && menu && desiredTime && kakao);
+  const selectedMenu = menus.find((menu) => menu.id === menuId) ?? null;
+  const kakaoValid = isOpenKakaoUrl(kakao.trim());
+  const timesOrdered = Boolean(timeFrom && timeTo && timeTo > timeFrom);
+  const desiredStart = date && timeFrom ? new Date(`${date}T${timeFrom}:00+09:00`) : null;
+  const desiredStartValid = Boolean(desiredStart && desiredStart.getTime() > Date.now());
+  const canSubmit = Boolean(
+    storeId && selectedMenu && date && timesOrdered && desiredStartValid && kakaoValid && note.length <= 500
+  );
+
+  useEffect(() => {
+    if (!storeId) {
+      setMenus([]);
+      setMenuId("");
+      return;
+    }
+    let active = true;
+    setMenusLoading(true);
+    setMenusError(null);
+    api.storeMenus(storeId)
+      .then((page) => {
+        if (!active) return;
+        setMenus(page.items);
+        setMenuId((current) => page.items.some((menu) => menu.id === current) ? current : "");
+      })
+      .catch((reason: unknown) => {
+        if (!active) return;
+        setMenus([]);
+        setMenuId("");
+        setMenusError(reason instanceof Error ? reason.message : "메뉴를 불러오지 못했습니다.");
+      })
+      .finally(() => {
+        if (active) setMenusLoading(false);
+      });
+    return () => { active = false; };
+  }, [storeId, menuReloadKey]);
+
+  useEffect(() => {
+    if (!storeId || selectedStore) return;
+    let active = true;
+    api.store(storeId)
+      .then((store) => { if (active) setSelectedStore(store); })
+      .catch(() => undefined);
+    return () => { active = false; };
+  }, [selectedStore, storeId]);
 
   async function handleSubmit() {
     if (!canSubmit) return;
@@ -645,15 +961,15 @@ function RequestPostScreen({ onBack, stores, onSubmit }: {
     setError(null);
     try {
       await onSubmit({
-        city: selectedStore!.region,
-        branch: selectedStore!.name,
-        menu,
+        storeId,
+        menuId,
         qty,
-        desiredTime,
-        note,
-        kakaoLink: kakao,
+        desiredTime: `${date.replaceAll("-", ".")} ${timeFrom} ~ ${timeTo}`,
+        note: note.trim(),
+        kakaoLink: kakao.trim(),
       });
-      setDone(true);
+      if (mode === "edit") onBack();
+      else setDone(true);
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "요청을 등록하지 못했습니다.");
     } finally {
@@ -673,9 +989,12 @@ function RequestPostScreen({ onBack, stores, onSubmit }: {
       <div className="flex-1 overflow-y-auto px-3 py-3">
         <StoreBrowser
           initialStores={stores}
-          selectedId={selectedStore?.id}
+          selectedId={storeId}
           onSelect={(store) => {
             setSelectedStore(store);
+            setStoreId(store.id);
+            setMenuId("");
+            setMenus([]);
             setStorePickerOpen(false);
           }}
         />
@@ -683,16 +1002,29 @@ function RequestPostScreen({ onBack, stores, onSubmit }: {
     </div>
   );
 
-  if (done) return (
+  if (menuPickerOpen) return (
+    <MenuPickerScreen
+      menus={menus}
+      selectedId={menuId}
+      storeName={selectedStore?.name ?? initialRequest?.branch ?? "선택한 매장"}
+      onBack={() => setMenuPickerOpen(false)}
+      onSelect={(menu) => {
+        setMenuId(menu.id);
+        setMenuPickerOpen(false);
+      }}
+    />
+  );
+
+  if (mode === "create" && done) return (
     <div className="flex flex-col h-full items-center justify-center gap-6 px-8 text-center bg-white">
       <div className="w-16 h-16 bg-purple-100 rounded-full flex items-center justify-center">
         <CheckCircle className="w-8 h-8 text-primary" />
       </div>
       <div>
         <h2 className="text-xl font-black text-gray-900">요청이 등록됐어요!</h2>
-        <p className="text-sm text-gray-400 mt-2 leading-relaxed">요청 목록에서 수락 상태를 확인할 수 있어요.</p>
+        <p className="text-sm text-gray-400 mt-2 leading-relaxed">구해요 게시판에서 요청 내용과<br />수락 상태를 확인할 수 있어요.</p>
       </div>
-      <button onClick={onBack}
+      <button onClick={onComplete ?? onBack}
         className="w-full max-w-xs bg-primary text-white rounded-xl py-4 font-black text-sm">
         확인
       </button>
@@ -707,7 +1039,9 @@ function RequestPostScreen({ onBack, stores, onSubmit }: {
           className="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center">
           <ArrowLeft className="w-4 h-4 text-gray-700" />
         </button>
-        <span className="flex-1 text-center font-black text-sm text-gray-900 -ml-8 pointer-events-none">음료 요청하기</span>
+        <span className="flex-1 text-center font-black text-sm text-gray-900 -ml-8 pointer-events-none">
+          {mode === "edit" ? "요청 수정" : "메뉴 요청하기"}
+        </span>
       </div>
 
       <div className="flex-1 overflow-y-auto">
@@ -721,6 +1055,15 @@ function RequestPostScreen({ onBack, stores, onSubmit }: {
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-black text-gray-900">{selectedStore.name}</p>
                     <p className="text-xs text-gray-500 mt-0.5 line-clamp-2">{selectedStore.address}</p>
+                  </div>
+                  <span className="text-xs font-black text-primary flex-shrink-0">변경</span>
+                </div>
+              ) : initialRequest ? (
+                <div className="flex items-center gap-3">
+                  <div className="w-11 h-11 rounded-2xl bg-[#FFE500] text-[#3A1D1D] flex items-center justify-center font-black flex-shrink-0">M</div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-black text-gray-900">{initialRequest.branch}</p>
+                    <p className="text-xs text-gray-500 mt-0.5">{initialRequest.city} · 기존 선택 매장</p>
                   </div>
                   <span className="text-xs font-black text-primary flex-shrink-0">변경</span>
                 </div>
@@ -740,40 +1083,106 @@ function RequestPostScreen({ onBack, stores, onSubmit }: {
           </FormSection>
 
           <FormSection label="원하는 메뉴">
-            <div className="relative">
-              <select
-                value={menu}
-                onChange={e => setMenu(e.target.value)}
-                className={`w-full appearance-none rounded-xl border border-gray-100 bg-gray-50 px-4 py-3.5 pr-10 text-sm outline-none transition-colors focus:border-primary ${menu ? "text-gray-900" : "text-gray-400"}`}
-              >
-                <option value="" disabled>메뉴를 선택해주세요</option>
-                {REQUEST_MENU_OPTIONS.map(option => (
-                  <option key={option} value={option}>{option}</option>
-                ))}
-              </select>
-              <ChevronDown className="pointer-events-none absolute right-4 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
-            </div>
+            <button
+              type="button"
+              onClick={() => {
+                if (!storeId) setStorePickerOpen(true);
+                else setMenuPickerOpen(true);
+              }}
+              disabled={menusLoading || Boolean(menusError) || (Boolean(storeId) && menus.length === 0)}
+              className={`w-full overflow-hidden rounded-2xl border text-left transition-colors disabled:opacity-60 ${
+                selectedMenu
+                  ? "border-purple-100 bg-white shadow-sm"
+                  : "border-gray-100 bg-gray-50"
+              }`}
+            >
+              {selectedMenu ? (
+                <div className="flex items-center gap-3 p-3">
+                  <div className="h-16 w-16 flex-shrink-0 overflow-hidden rounded-xl border border-gray-100 bg-white">
+                    {selectedMenu.imageUrl ? (
+                      <ImageWithFallback src={selectedMenu.imageUrl} alt={selectedMenu.name}
+                        className="h-full w-full object-contain p-1" />
+                    ) : (
+                      <div className="flex h-full w-full items-center justify-center text-2xl" aria-hidden="true">☕</div>
+                    )}
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <span className="rounded-full bg-purple-50 px-2 py-1 text-[9px] font-black text-primary">
+                      {EVENT_MENU_GROUP_LABELS[eventMenuGroup(selectedMenu)]}
+                    </span>
+                    <p className="mt-1.5 truncate text-sm font-black text-gray-900">{menuDisplayName(selectedMenu)}</p>
+                    {selectedMenu.englishName && <p className="mt-0.5 truncate text-[10px] text-gray-400">{selectedMenu.englishName}</p>}
+                  </div>
+                  <span className="flex-shrink-0 text-xs font-black text-primary">변경</span>
+                </div>
+              ) : (
+                <div className="flex items-center gap-3 p-4">
+                  <div className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-xl bg-white text-2xl shadow-sm" aria-hidden="true">☕</div>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm font-black text-gray-700">
+                      {!storeId ? "매장을 먼저 선택해주세요" : menusLoading ? "메뉴를 불러오는 중..." : "사진을 보며 메뉴 선택하기"}
+                    </p>
+                    <p className="mt-0.5 text-[11px] text-gray-400">
+                      {!storeId ? "매장을 정하면 판매 메뉴를 보여드려요." : "메뉴 사진과 이름을 함께 확인할 수 있어요."}
+                    </p>
+                  </div>
+                  <ChevronRight className="h-4 w-4 flex-shrink-0 text-gray-300" />
+                </div>
+              )}
+            </button>
+            {menusError && (
+              <button type="button" onClick={() => setMenuReloadKey((current) => current + 1)}
+                className="mt-2 w-full rounded-xl bg-red-50 px-3 py-2.5 text-left text-xs text-red-500">
+                {menusError} 다시 시도하려면 눌러주세요.
+              </button>
+            )}
+            {storeId && !menusLoading && !menusError && menus.length === 0 && (
+              <p className="mt-2 rounded-xl bg-gray-50 px-3 py-2.5 text-xs text-gray-400">
+                이 매장에서 선택할 수 있는 메뉴가 없어요.
+              </p>
+            )}
           </FormSection>
 
           <FormSection label="수량">
             <div className="flex items-center gap-5 bg-gray-50 rounded-xl px-4 py-3">
-              <button onClick={() => setQty(q => Math.max(1, q - 1))}
+              <button type="button" aria-label="수량 줄이기" onClick={() => setQty(q => Math.max(1, q - 1))}
                 className="w-8 h-8 rounded-full border border-gray-200 bg-white flex items-center justify-center">
                 <Minus className="w-3.5 h-3.5 text-gray-600" />
               </button>
               <span className="text-lg font-black text-gray-900 flex-1 text-center">{qty}잔</span>
-              <button onClick={() => setQty(q => Math.min(10, q + 1))}
+              <button type="button" aria-label="수량 늘리기" onClick={() => setQty(q => Math.min(30, q + 1))}
                 className="w-8 h-8 rounded-full bg-primary flex items-center justify-center">
                 <Plus className="w-3.5 h-3.5 text-white" />
               </button>
             </div>
+            <p className="text-[11px] text-gray-400 mt-2 ml-1">한 요청에 최대 30잔까지 등록할 수 있어요.</p>
+          </FormSection>
+
+          <FormSection label="희망 날짜">
+            <input type="date" min={seoulDateInputValue()}
+              className="w-full bg-gray-50 border border-gray-100 rounded-xl px-4 py-3.5 text-sm outline-none text-gray-900 focus:border-primary"
+              value={date} onChange={e => setDate(e.target.value)} />
+            {initialRequest && !parsedDesiredTime && (
+              <p className="text-[11px] text-amber-600 mt-2 ml-1">기존 입력: {initialRequest.desiredTime} · 수정 시 날짜와 시간을 다시 선택해주세요.</p>
+            )}
           </FormSection>
 
           <FormSection label="희망 시간">
-            <input
-              className="w-full bg-gray-50 border border-gray-100 rounded-xl px-4 py-3.5 text-sm outline-none text-gray-900 focus:border-primary transition-colors"
-              placeholder="예) 오늘 15:00 ~ 18:00"
-              value={desiredTime} onChange={e => setDesiredTime(e.target.value)} />
+            <div className="flex items-center gap-3">
+              <input type="time"
+                className="flex-1 min-w-0 bg-gray-50 border border-gray-100 rounded-xl px-3 py-3.5 text-sm outline-none text-gray-900 focus:border-primary transition-colors"
+                value={timeFrom} onChange={e => setTimeFrom(e.target.value)} />
+              <span className="text-gray-400 text-sm font-bold flex-shrink-0">~</span>
+              <input type="time"
+                className="flex-1 min-w-0 bg-gray-50 border border-gray-100 rounded-xl px-3 py-3.5 text-sm outline-none text-gray-900 focus:border-primary transition-colors"
+                value={timeTo} onChange={e => setTimeTo(e.target.value)} />
+            </div>
+            {timeFrom && timeTo && !timesOrdered && (
+              <p className="text-xs text-red-400 mt-1.5 ml-1">종료 시간은 시작 시간보다 늦어야 합니다.</p>
+            )}
+            {date && timeFrom && timesOrdered && !desiredStartValid && (
+              <p className="text-xs text-red-400 mt-1.5 ml-1">희망 시작 시간은 현재보다 늦어야 합니다.</p>
+            )}
           </FormSection>
 
           <FormSection label="오픈 카카오톡 링크">
@@ -781,7 +1190,13 @@ function RequestPostScreen({ onBack, stores, onSubmit }: {
               className="w-full bg-gray-50 border border-gray-100 rounded-xl px-4 py-3.5 text-sm outline-none text-gray-900 focus:border-primary transition-colors"
               placeholder="https://open.kakao.com/o/..."
               value={kakao} onChange={e => setKakao(e.target.value)} />
-            <p className="text-[11px] text-gray-400 mt-2 ml-1">판매자가 수락하면 이 링크로 연결돼요.</p>
+            {kakao && !kakaoValid && (
+              <p className="text-xs text-red-400 mt-1.5 ml-1">https://open.kakao.com으로 시작하는 오픈채팅 링크를 입력해주세요.</p>
+            )}
+            <div className="flex items-start gap-2 mt-2 bg-yellow-50 border border-yellow-100 rounded-xl px-3 py-2.5">
+              <MessageCircle className="w-3.5 h-3.5 text-yellow-700 flex-shrink-0 mt-0.5" />
+              <p className="text-[11px] text-yellow-700 leading-relaxed">요청이 수락되기 전에는 다른 사용자에게 링크가 공개되지 않아요. 수락 후 판매자와 픽업 방법을 조율해주세요.</p>
+            </div>
           </FormSection>
 
           <FormSection label="추가 메모 (선택)">
@@ -789,7 +1204,9 @@ function RequestPostScreen({ onBack, stores, onSubmit }: {
               className="w-full bg-gray-50 border border-gray-100 rounded-xl px-4 py-3.5 text-sm outline-none text-gray-900 focus:border-primary transition-colors resize-none"
               placeholder="원하는 조건이나 참고사항을 적어주세요"
               rows={3}
+              maxLength={500}
               value={note} onChange={e => setNote(e.target.value)} />
+            <p className="text-[11px] text-gray-400 text-right mt-1.5">{note.length}/500</p>
           </FormSection>
         </div>
       </div>
@@ -800,7 +1217,7 @@ function RequestPostScreen({ onBack, stores, onSubmit }: {
           onClick={handleSubmit}
           disabled={!canSubmit || submitting}
           className="w-full bg-primary text-white rounded-2xl py-4 font-black text-base disabled:opacity-40 transition-opacity">
-          {submitting ? "등록 중..." : "요청 등록하기"}
+          {submitting ? "저장 중..." : mode === "edit" ? "수정하기" : "요청 등록하기"}
         </button>
       </div>
     </div>
@@ -1055,26 +1472,67 @@ function CreateSheet({ onClose, onPostDeal, onPostRequest }: {
   );
 }
 
-function OrderModal({ deal, onClose, onConfirm }: {
+function OrderModal({ deal, stores, onClose, onConfirm }: {
   deal: Deal;
+  stores: ApiStore[];
   onClose: () => void;
-  onConfirm: (qty: number, pickupStore: string) => Promise<void>;
+  onConfirm: (qty: number, pickupStoreId: string, menuId: string) => Promise<void>;
 }) {
-  const [selected, setSelected] = useState(deal.drinks[0]);
+  const initialStore = stores.find((store) => store.id === deal.storeId) ?? null;
+  const [selectedStore, setSelectedStore] = useState<ApiStore | null>(initialStore);
+  const [selectedMenu, setSelectedMenu] = useState<ApiMenu | null>(null);
+  const [menus, setMenus] = useState<ApiMenu[]>([]);
+  const [menusLoading, setMenusLoading] = useState(false);
+  const [menusError, setMenusError] = useState<string | null>(null);
+  const [storePickerOpen, setStorePickerOpen] = useState(false);
+  const [menuPickerOpen, setMenuPickerOpen] = useState(false);
   const [qty, setQty] = useState(1);
-  const [pickupStore, setPickupStore] = useState("");
   const [done, setDone] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const remaining = deal.totalTarget - deal.currentOrders;
-  const canSubmit = pickupStore.trim().length > 0;
+  const canSubmit = Boolean(selectedStore && selectedMenu && qty <= remaining);
+
+  useEffect(() => {
+    if (selectedStore || !deal.storeId) return;
+    let active = true;
+    api.store(deal.storeId)
+      .then((store) => { if (active) setSelectedStore(store); })
+      .catch(() => undefined);
+    return () => { active = false; };
+  }, [deal.storeId, selectedStore]);
+
+  useEffect(() => {
+    if (!selectedStore) {
+      setMenus([]);
+      setSelectedMenu(null);
+      return;
+    }
+    let active = true;
+    setMenusLoading(true);
+    setMenusError(null);
+    api.storeMenus(selectedStore.id)
+      .then((page) => {
+        if (!active) return;
+        setMenus(page.items);
+        setSelectedMenu((current) => current && page.items.some((menu) => menu.id === current.id) ? current : null);
+      })
+      .catch((reason: unknown) => {
+        if (!active) return;
+        setMenus([]);
+        setSelectedMenu(null);
+        setMenusError(reason instanceof Error ? reason.message : "메뉴를 불러오지 못했습니다.");
+      })
+      .finally(() => { if (active) setMenusLoading(false); });
+    return () => { active = false; };
+  }, [selectedStore]);
 
   async function submitOrder() {
-    if (!canSubmit) return;
+    if (!selectedStore || !selectedMenu || !canSubmit) return;
     setSubmitting(true);
     setError(null);
     try {
-      await onConfirm(qty, pickupStore.trim());
+      await onConfirm(qty, selectedStore.id, selectedMenu.id);
       setDone(true);
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "참여 신청에 실패했습니다.");
@@ -1083,108 +1541,126 @@ function OrderModal({ deal, onClose, onConfirm }: {
     }
   }
 
-  if (done) return (
-    <div className="fixed inset-0 z-50 bg-black/40 flex items-end">
-      <div className="bg-white w-full rounded-t-3xl p-6 flex flex-col items-center gap-4 text-center">
-        <div className="w-16 h-16 bg-purple-100 rounded-full flex items-center justify-center">
-          <CheckCircle className="w-8 h-8 text-primary" />
+  if (storePickerOpen) return (
+    <div className="fixed inset-0 z-50 mx-auto flex max-w-sm flex-col bg-[#F8F6FF]">
+      <div className="flex items-center border-b border-gray-100 bg-white px-4 py-3">
+        <button type="button" onClick={() => setStorePickerOpen(false)} className="flex h-8 w-8 items-center justify-center rounded-full bg-gray-100">
+          <ArrowLeft className="h-4 w-4 text-gray-700" />
+        </button>
+        <span className="pointer-events-none -ml-8 flex-1 text-center text-sm font-black text-gray-900">픽업 매장 선택</span>
+      </div>
+      <div className="flex-1 overflow-y-auto p-3">
+        <StoreBrowser initialStores={stores} selectedId={selectedStore?.id} onSelect={(store) => {
+          setSelectedStore(store);
+          setSelectedMenu(null);
+          setMenus([]);
+          setStorePickerOpen(false);
+        }} />
+      </div>
+    </div>
+  );
+
+  if (menuPickerOpen && selectedStore) return (
+    <div className="fixed inset-0 z-50 mx-auto max-w-sm bg-white">
+      <MenuPickerScreen
+        menus={menus}
+        selectedId={selectedMenu?.id ?? ""}
+        storeName={selectedStore.name}
+        onBack={() => setMenuPickerOpen(false)}
+        onSelect={(menu) => { setSelectedMenu(menu); setMenuPickerOpen(false); }}
+      />
+    </div>
+  );
+
+  if (done && selectedStore && selectedMenu) return (
+    <div className="fixed inset-0 z-50 mx-auto flex max-w-sm items-end bg-black/40">
+      <div className="flex w-full flex-col items-center gap-4 rounded-t-3xl bg-white p-6 text-center">
+        <div className="flex h-16 w-16 items-center justify-center rounded-full bg-purple-100">
+          <CheckCircle className="h-8 w-8 text-primary" />
         </div>
         <div>
-        <h3 className="font-black text-lg text-gray-900">참여 신청 완료!</h3>
-          <p className="text-sm text-gray-500 mt-1">
-            {selected.emoji} {selected.name} {qty}잔<br />
-            예상 금액 <strong className="text-gray-900">{(selected.discountPrice * qty).toLocaleString()}원</strong><br />
-            픽업 지점: <strong className="text-gray-900">{pickupStore}</strong>
+          <h3 className="text-lg font-black text-gray-900">참여 신청 완료!</h3>
+          <p className="mt-1 text-sm leading-relaxed text-gray-500">
+            <strong className="text-gray-900">{menuDisplayName(selectedMenu)} {qty}잔</strong><br />
+            픽업 지점: <strong className="text-gray-900">{selectedStore.name}</strong>
           </p>
-          <p className="text-xs text-primary mt-2 font-semibold">
-            결제와 수령 방법은 카카오 오픈채팅에서 모집자와 확인해주세요.
-          </p>
+          <p className="mt-2 text-xs font-semibold text-primary">최종 가격과 수령 방법은 오픈채팅에서 모집자와 확인해주세요.</p>
         </div>
-        <a href={deal.kakaoLink} target="_blank" rel="noreferrer"
-          className="w-full flex items-center justify-center gap-2 py-3.5 rounded-xl font-bold text-sm"
-          style={{ backgroundColor: "#FEE500", color: "#191919" }}
-          onClick={onClose}>
-          <svg width="16" height="16" viewBox="0 0 18 18" fill="none">
-            <path fillRule="evenodd" clipRule="evenodd"
-              d="M9 1.5C4.86 1.5 1.5 4.19 1.5 7.5c0 2.13 1.35 4.005 3.39 5.085l-.87 3.24a.225.225 0 00.345.24L8.25 13.44A9.3 9.3 0 009 13.5c4.14 0 7.5-2.69 7.5-6s-3.36-6-7.5-6z"
-              fill="#191919" />
-          </svg>
-          오픈채팅 입장하기
+        <a href={deal.kakaoLink} target="_blank" rel="noreferrer" onClick={onClose}
+          className="flex w-full items-center justify-center gap-2 rounded-xl py-3.5 text-sm font-bold"
+          style={{ backgroundColor: "#FEE500", color: "#191919" }}>
+          <MessageCircle className="h-4 w-4" /> 오픈채팅 입장하기
         </a>
-        <button onClick={onClose}
-          className="w-full text-sm text-gray-400">닫기</button>
+        <button type="button" onClick={onClose} className="w-full text-sm text-gray-400">닫기</button>
       </div>
     </div>
   );
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/40 flex items-end">
-      <div className="bg-white w-full rounded-t-3xl">
-        <div className="flex items-center justify-between px-5 pt-5 pb-3 border-b border-gray-100">
-          <h3 className="font-black text-base text-gray-900">음료 주문하기</h3>
-          <button onClick={onClose} className="w-8 h-8 bg-gray-100 rounded-full flex items-center justify-center">
-            <X className="w-4 h-4 text-gray-600" />
+    <div className="fixed inset-0 z-50 mx-auto flex max-w-sm items-end bg-black/40">
+      <div className="flex max-h-[92dvh] w-full flex-col rounded-t-3xl bg-white">
+        <div className="flex items-center justify-between border-b border-gray-100 px-5 pb-3 pt-5">
+          <div>
+            <h3 className="text-base font-black text-gray-900">음료 주문하기</h3>
+            <p className="mt-0.5 text-[10px] text-gray-400">공식 매장과 현재 판매 메뉴에서 선택해주세요.</p>
+          </div>
+          <button type="button" onClick={onClose} className="flex h-8 w-8 items-center justify-center rounded-full bg-gray-100">
+            <X className="h-4 w-4 text-gray-600" />
           </button>
         </div>
-        <div className="px-5 py-4 space-y-4">
+        <div className="flex-1 space-y-4 overflow-y-auto px-5 py-4">
           <div>
-            <p className="text-xs font-bold text-gray-400 mb-2">픽업 받을 지점</p>
-            <div className="flex items-center gap-2 bg-purple-50 rounded-xl px-3 py-2.5">
-              <MapPin className="w-4 h-4 text-primary flex-shrink-0" />
-              <input
-                className="flex-1 bg-transparent text-sm font-bold text-gray-900 outline-none placeholder:text-gray-300 placeholder:font-normal"
-                placeholder={`${deal.franchise} 지점명을 입력해주세요`}
-                value={pickupStore} onChange={e => setPickupStore(e.target.value)} />
-            </div>
+            <p className="mb-2 text-xs font-bold text-gray-400">픽업 받을 매장</p>
+            <button type="button" onClick={() => setStorePickerOpen(true)}
+              className="flex w-full items-center gap-3 rounded-2xl border border-purple-100 bg-purple-50 p-3 text-left">
+              <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl bg-[#FFE500] font-black text-[#3A1D1D]">M</div>
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-sm font-black text-gray-900">{selectedStore?.name ?? "공식 매장을 검색해주세요"}</p>
+                <p className="mt-0.5 line-clamp-1 text-[10px] text-gray-400">{selectedStore?.address ?? "매장명·지역·주소로 검색할 수 있어요."}</p>
+              </div>
+              <ChevronRight className="h-4 w-4 text-primary" />
+            </button>
           </div>
+
           <div>
-            <p className="text-xs font-bold text-gray-400 mb-2">음료 선택</p>
-            <div className="space-y-2">
-              {deal.drinks.map(d => (
-                <button key={d.name} onClick={() => setSelected(d)}
-                  className={`w-full flex items-center justify-between px-4 py-3 rounded-2xl border transition-colors ${
-                    selected.name === d.name ? "border-primary bg-purple-50" : "border-gray-100"
-                  }`}>
-                  <div className="flex items-center gap-2.5">
-                    <span className="text-xl">{d.emoji}</span>
-                    <div className="text-left">
-                      <p className="text-sm font-bold text-gray-900">{d.name}</p>
-                      <p className="text-[10px] text-gray-300 line-through">{d.originalPrice.toLocaleString()}원</p>
-                    </div>
-                  </div>
-                  <div className="text-right">
-                    <p className="text-base font-black text-primary">{d.discountPrice.toLocaleString()}원</p>
-                    <p className="text-[10px] font-black text-red-500">
-                      {discPct(d.originalPrice, d.discountPrice)}% OFF
-                    </p>
-                  </div>
-                </button>
-              ))}
-            </div>
+            <p className="mb-2 text-xs font-bold text-gray-400">메뉴 선택</p>
+            <button type="button" disabled={!selectedStore || menusLoading || Boolean(menusError) || menus.length === 0}
+              onClick={() => setMenuPickerOpen(true)}
+              className="flex w-full items-center gap-3 rounded-2xl border border-gray-100 bg-gray-50 p-3 text-left disabled:opacity-50">
+              <div className="flex h-14 w-14 flex-shrink-0 items-center justify-center overflow-hidden rounded-xl bg-white text-2xl">
+                {selectedMenu?.imageUrl ? <ImageWithFallback src={selectedMenu.imageUrl} alt={selectedMenu.name} className="h-full w-full object-contain p-1" /> : "☕"}
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-sm font-black text-gray-900">
+                  {selectedMenu ? menuDisplayName(selectedMenu) : menusLoading ? "메뉴를 불러오는 중..." : "메뉴판에서 선택해주세요"}
+                </p>
+                <p className="mt-0.5 text-[10px] text-gray-400">미션·일반 이벤트 메뉴 10종</p>
+              </div>
+              <ChevronRight className="h-4 w-4 text-gray-300" />
+            </button>
+            {menusError && <p className="mt-2 rounded-xl bg-red-50 px-3 py-2 text-[11px] text-red-500">{menusError}</p>}
+            {selectedStore && !menusLoading && !menusError && menus.length === 0 && <p className="mt-2 rounded-xl bg-gray-50 px-3 py-2 text-[11px] text-gray-400">이 매장에서 선택 가능한 이벤트 메뉴가 없습니다.</p>}
           </div>
+
           <div>
-            <p className="text-xs font-bold text-gray-400 mb-2">수량 <span className="text-gray-300">(최대 {remaining}잔)</span></p>
+            <p className="mb-2 text-xs font-bold text-gray-400">수량 <span className="text-gray-300">(최대 {remaining}잔)</span></p>
             <div className="flex items-center gap-4">
-              <button onClick={() => setQty(q => Math.max(1, q - 1))}
-                className="w-9 h-9 rounded-full border border-gray-200 flex items-center justify-center">
-                <Minus className="w-4 h-4 text-gray-600" />
+              <button type="button" onClick={() => setQty((value) => Math.max(1, value - 1))} className="flex h-9 w-9 items-center justify-center rounded-full border border-gray-200">
+                <Minus className="h-4 w-4 text-gray-600" />
               </button>
-              <span className="text-lg font-black text-gray-900 w-6 text-center">{qty}</span>
-              <button onClick={() => setQty(q => Math.min(remaining, q + 1))}
-                className="w-9 h-9 rounded-full bg-primary flex items-center justify-center">
-                <Plus className="w-4 h-4 text-white" />
+              <span className="w-6 text-center text-lg font-black text-gray-900">{qty}</span>
+              <button type="button" onClick={() => setQty((value) => Math.min(remaining, value + 1))} className="flex h-9 w-9 items-center justify-center rounded-full bg-primary">
+                <Plus className="h-4 w-4 text-white" />
               </button>
             </div>
           </div>
-          <div className="flex items-center justify-between bg-gray-50 rounded-xl px-4 py-3">
-            <span className="text-sm text-gray-500">예상 주문 금액</span>
-            <span className="text-lg font-black text-primary">{(selected.discountPrice * qty).toLocaleString()}원</span>
-          </div>
+
+          <div className="rounded-xl bg-yellow-50 px-4 py-3 text-[11px] leading-relaxed text-yellow-800">앱에서는 결제하지 않습니다. 모집글의 할인 조건, 실제 메뉴 가격과 결제·수령 방법은 참여 후 오픈채팅에서 확인해주세요.</div>
         </div>
-        <div className="px-5 pb-6">
-          {error && <p className="text-xs text-red-500 text-center mb-2">{error}</p>}
-          <button onClick={submitOrder} disabled={!canSubmit || submitting}
-            className="w-full bg-primary text-white rounded-2xl py-4 font-black text-base disabled:opacity-40 transition-opacity">
+        <div className="px-5 pb-6 pt-3">
+          {error && <p className="mb-2 text-center text-xs text-red-500">{error}</p>}
+          <button type="button" onClick={() => void submitOrder()} disabled={!canSubmit || submitting}
+            className="w-full rounded-2xl bg-primary py-4 text-base font-black text-white transition-opacity disabled:opacity-40">
             {submitting ? "신청 중..." : "참여 신청하기"}
           </button>
         </div>
@@ -1481,6 +1957,495 @@ function StoreDirectoryScreen({ initialStores, onBack }: { initialStores: ApiSto
         <p className="text-[10px] text-gray-300 text-center px-5 py-5 leading-relaxed">
           매장 정보는 메가MGC커피 공식 매장찾기 기준이며 실제 운영 여부·영업시간은 방문 전에 매장으로 확인해주세요.
         </p>
+      </div>
+    </div>
+  );
+}
+
+const ADMIN_TABLE_FALLBACK: Array<{ key: ApiAdminDatabaseTable; label: string }> = [
+  { key: "users", label: "사용자" },
+  { key: "posts", label: "모집글" },
+  { key: "participations", label: "참여" },
+  { key: "purchaseRequests", label: "구매 요청" },
+  { key: "stores", label: "매장" },
+  { key: "menus", label: "메뉴" },
+  { key: "storeMenus", label: "매장별 메뉴" },
+  { key: "events", label: "이벤트" },
+  { key: "inquiries", label: "문의" },
+  { key: "reviews", label: "후기" },
+  { key: "favorites", label: "찜" },
+  { key: "reports", label: "신고" },
+  { key: "notifications", label: "알림" },
+  { key: "adminActions", label: "관리자 작업 기록" },
+];
+
+const ADMIN_FIELD_LABELS: Record<string, string> = {
+  id: "ID",
+  nickname: "닉네임",
+  role: "권한",
+  status: "상태",
+  title: "제목",
+  message: "내용",
+  name: "이름",
+  menu: "메뉴",
+  branch: "지점",
+  region: "지역",
+  address: "주소",
+  quantity: "수량",
+  rating: "평점",
+  action: "작업",
+  targetType: "대상 종류",
+  targetId: "대상 ID",
+  reason: "사유",
+  createdAt: "생성일",
+  updatedAt: "수정일",
+  lastLoginAt: "최근 로그인",
+  readAt: "읽은 시각",
+};
+
+function adminValue(value: unknown): string {
+  if (value === null || value === undefined || value === "") return "-";
+  if (typeof value === "boolean") return value ? "예" : "아니요";
+  if (typeof value === "string" && /^\d{4}-\d{2}-\d{2}T/.test(value)) {
+    return `${formatDate(value)} ${formatTime(value)}`;
+  }
+  if (typeof value === "object") return JSON.stringify(value);
+  return String(value);
+}
+
+function AdminDashboardScreen({ onBack, onMenus }: { onBack: () => void; onMenus: () => void }) {
+  const [dashboard, setDashboard] = useState<ApiAdminDashboard | null>(null);
+  const [table, setTable] = useState<ApiAdminDatabaseTable>("users");
+  const [databasePage, setDatabasePage] = useState<ApiAdminDatabasePage | null>(null);
+  const [page, setPage] = useState(1);
+  const [searchDraft, setSearchDraft] = useState("");
+  const [search, setSearch] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [databaseLoading, setDatabaseLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [reloadKey, setReloadKey] = useState(0);
+  const [actionLoadingId, setActionLoadingId] = useState<string | null>(null);
+
+  useEffect(() => {
+    let active = true;
+    setLoading(true);
+    setError(null);
+    api.adminDashboard()
+      .then((value) => { if (active) setDashboard(value); })
+      .catch((reason: unknown) => {
+        if (active) setError(reason instanceof Error ? reason.message : "관리자 현황을 불러오지 못했습니다.");
+      })
+      .finally(() => { if (active) setLoading(false); });
+    return () => { active = false; };
+  }, [reloadKey]);
+
+  useEffect(() => {
+    let active = true;
+    setDatabaseLoading(true);
+    api.adminDatabase(table, { search: search || undefined, page, limit: 20 })
+      .then((value) => { if (active) setDatabasePage(value); })
+      .catch((reason: unknown) => {
+        if (active) setError(reason instanceof Error ? reason.message : "DB 데이터를 불러오지 못했습니다.");
+      })
+      .finally(() => { if (active) setDatabaseLoading(false); });
+    return () => { active = false; };
+  }, [page, reloadKey, search, table]);
+
+  const tables = dashboard?.databaseTables ?? ADMIN_TABLE_FALLBACK;
+  const counts = dashboard?.counts;
+  const countCards = counts ? [
+    { label: "전체 사용자", value: counts.users, detail: `정지 ${counts.suspendedUsers}명` },
+    { label: "모집글", value: counts.posts, detail: `진행 중 ${counts.openPosts}개` },
+    { label: "참여", value: counts.participations, detail: "확정 참여" },
+    { label: "구매 요청", value: counts.purchaseRequests, detail: `대기 ${counts.openPurchaseRequests}개` },
+    { label: "처리할 신고", value: counts.pendingReports, detail: "미처리 신고" },
+    { label: "매장 / 메뉴", value: `${counts.activeStores.toLocaleString()} / ${counts.activeMenus.toLocaleString()}`, detail: "활성 데이터" },
+  ] : [];
+
+  function applySearch() {
+    setPage(1);
+    setSearch(searchDraft.trim());
+  }
+
+  async function runAdminAction(id: string, action: () => Promise<unknown>) {
+    setActionLoadingId(id);
+    setError(null);
+    try {
+      await action();
+      setReloadKey((value) => value + 1);
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "관리 작업을 처리하지 못했습니다.");
+    } finally {
+      setActionLoadingId(null);
+    }
+  }
+
+  function rowActions(row: Record<string, unknown>): React.ReactNode {
+    const id = typeof row.id === "string" ? row.id : null;
+    if (!id) return null;
+    const disabled = actionLoadingId === id;
+    if (table === "users") {
+      const suspended = row.status === "SUSPENDED";
+      return (
+        <div className="border-t border-gray-100 p-3">
+          <button type="button" disabled={disabled} onClick={() => {
+            if (suspended) {
+              void runAdminAction(id, () => api.unsuspendAdminUser(id, "관리자 대시보드에서 정지 해제"));
+              return;
+            }
+            const reason = window.prompt("사용자 정지 사유를 입력해주세요.")?.trim();
+            if (reason) void runAdminAction(id, () => api.suspendAdminUser(id, reason));
+          }} className={`w-full rounded-xl py-2.5 text-xs font-black disabled:opacity-50 ${suspended ? "bg-green-50 text-green-700" : "bg-red-50 text-red-600"}`}>
+            {disabled ? "처리 중..." : suspended ? "사용자 정지 해제" : "사용자 정지"}
+          </button>
+        </div>
+      );
+    }
+    if (table === "posts") {
+      const deleted = Boolean(row.deletedAt);
+      return (
+        <div className="border-t border-gray-100 p-3">
+          <button type="button" disabled={disabled} onClick={() => {
+            if (deleted) {
+              void runAdminAction(id, () => api.restoreAdminPost(id, "관리자 대시보드에서 복구"));
+              return;
+            }
+            const reason = window.prompt("모집글 삭제 사유를 입력해주세요.")?.trim();
+            if (reason) void runAdminAction(id, () => api.deleteAdminPost(id, reason));
+          }} className={`w-full rounded-xl py-2.5 text-xs font-black disabled:opacity-50 ${deleted ? "bg-green-50 text-green-700" : "bg-red-50 text-red-600"}`}>
+            {disabled ? "처리 중..." : deleted ? "모집글 복구" : "모집글 숨김"}
+          </button>
+        </div>
+      );
+    }
+    if (table === "reports" && row.status === "PENDING") {
+      const handle = (status: "RESOLVED" | "REJECTED") => {
+        const note = window.prompt(status === "RESOLVED" ? "처리 메모를 입력해주세요." : "반려 사유를 입력해주세요.")?.trim();
+        if (note) void runAdminAction(id, () => api.handleAdminReport(id, status, note));
+      };
+      return (
+        <div className="grid grid-cols-2 gap-2 border-t border-gray-100 p-3">
+          <button type="button" disabled={disabled} onClick={() => handle("RESOLVED")} className="rounded-xl bg-primary py-2.5 text-xs font-black text-white disabled:opacity-50">처리 완료</button>
+          <button type="button" disabled={disabled} onClick={() => handle("REJECTED")} className="rounded-xl bg-gray-100 py-2.5 text-xs font-black text-gray-600 disabled:opacity-50">신고 반려</button>
+        </div>
+      );
+    }
+    return null;
+  }
+
+  return (
+    <div className="flex h-full flex-col bg-[#F8F6FF]">
+      <div className="flex flex-shrink-0 items-center border-b border-gray-100 bg-white px-4 py-3">
+        <button type="button" onClick={onBack} className="flex h-8 w-8 items-center justify-center rounded-full bg-gray-100">
+          <ArrowLeft className="h-4 w-4 text-gray-700" />
+        </button>
+        <span className="pointer-events-none -ml-8 flex-1 text-center text-sm font-black text-gray-900">관리자 대시보드</span>
+        <button type="button" aria-label="관리자 데이터 새로고침" onClick={() => setReloadKey((value) => value + 1)}
+          className="flex h-8 w-8 items-center justify-center rounded-full bg-purple-50">
+          <RefreshCw className={`h-4 w-4 text-primary ${loading ? "animate-spin" : ""}`} />
+        </button>
+      </div>
+
+      <div className="flex-1 space-y-5 overflow-y-auto px-4 py-4">
+        <section className="rounded-3xl bg-gradient-to-br from-primary to-[#7655d9] p-5 text-white shadow-lg shadow-purple-200">
+          <div className="flex items-center gap-3">
+            <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-white/15">
+              <LayoutDashboard className="h-5 w-5" />
+            </div>
+            <div>
+              <p className="text-base font-black">WISH MATCH 운영 현황</p>
+              <p className="mt-0.5 text-[11px] text-purple-100">관리자 전용 · 모든 조회는 서버에서 권한을 다시 확인합니다.</p>
+            </div>
+          </div>
+        </section>
+
+        {error && (
+          <div className="rounded-2xl border border-red-100 bg-red-50 px-4 py-3 text-xs leading-relaxed text-red-600">{error}</div>
+        )}
+
+        <section>
+          <div className="mb-2 flex items-center justify-between">
+            <h2 className="text-sm font-black text-gray-900">핵심 지표</h2>
+            {counts && <span className="text-[10px] text-gray-400">활성 사용자 {counts.activeUsers.toLocaleString()}명</span>}
+          </div>
+          {loading && !counts ? (
+            <div className="grid grid-cols-2 gap-2">{Array.from({ length: 6 }).map((_, index) => <div key={index} className="h-24 animate-pulse rounded-2xl bg-white" />)}</div>
+          ) : (
+            <div className="grid grid-cols-2 gap-2">
+              {countCards.map((card) => (
+                <div key={card.label} className="rounded-2xl border border-gray-100 bg-white p-3.5 shadow-sm">
+                  <p className="text-[11px] font-bold text-gray-400">{card.label}</p>
+                  <p className="mt-1 text-xl font-black text-gray-900">{typeof card.value === "number" ? card.value.toLocaleString() : card.value}</p>
+                  <p className="mt-1 text-[10px] text-purple-500">{card.detail}</p>
+                </div>
+              ))}
+            </div>
+          )}
+        </section>
+
+        <button type="button" onClick={onMenus}
+          className="flex w-full items-center gap-3 rounded-2xl border border-purple-100 bg-white p-4 text-left shadow-sm">
+          <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-purple-100"><Store className="h-5 w-5 text-primary" /></div>
+          <div className="min-w-0 flex-1">
+            <p className="text-sm font-black text-gray-900">매장별 판매 메뉴 관리</p>
+            <p className="mt-0.5 text-[11px] text-gray-400">공식 메뉴의 매장별 판매 예외를 설정합니다.</p>
+          </div>
+          <ChevronRight className="h-4 w-4 text-gray-300" />
+        </button>
+
+        <section className="space-y-3">
+          <div>
+            <div className="flex items-center gap-2">
+              <Database className="h-4 w-4 text-primary" />
+              <h2 className="text-sm font-black text-gray-900">DB 브라우저</h2>
+            </div>
+            <p className="mt-1 text-[10px] leading-relaxed text-gray-400">읽기 전용입니다. 인증 세션 토큰, 카카오 식별자, 오픈채팅 URL은 노출하지 않습니다.</p>
+          </div>
+
+          <select value={table} onChange={(event) => { setTable(event.target.value as ApiAdminDatabaseTable); setPage(1); setSearch(""); setSearchDraft(""); }}
+            className="w-full rounded-xl border border-gray-100 bg-white px-3 py-3 text-sm font-bold text-gray-700 outline-none focus:border-primary">
+            {tables.map((item) => <option key={item.key} value={item.key}>{item.label}</option>)}
+          </select>
+
+          <div className="flex gap-2">
+            <input value={searchDraft} onChange={(event) => setSearchDraft(event.target.value)}
+              onKeyDown={(event) => { if (event.key === "Enter") applySearch(); }}
+              placeholder="ID, 이름, 내용 검색"
+              className="min-w-0 flex-1 rounded-xl border border-gray-100 bg-white px-3 py-3 text-xs outline-none focus:border-primary" />
+            <button type="button" onClick={applySearch} className="rounded-xl bg-gray-900 px-4 text-xs font-black text-white">검색</button>
+          </div>
+
+          <div className="flex items-center justify-between px-1">
+            <p className="text-xs font-black text-gray-700">{databasePage?.label ?? tables.find((item) => item.key === table)?.label}</p>
+            <p className="text-[10px] text-gray-400">총 {(databasePage?.pagination.total ?? 0).toLocaleString()}건</p>
+          </div>
+
+          {databaseLoading ? (
+            <div className="space-y-2">{Array.from({ length: 3 }).map((_, index) => <div key={index} className="h-28 animate-pulse rounded-2xl bg-white" />)}</div>
+          ) : databasePage?.items.length ? (
+            <div className="space-y-2">
+              {databasePage.items.map((row, rowIndex) => (
+                <article key={String(row.id ?? `${table}-${page}-${rowIndex}`)} className="overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-sm">
+                  {Object.entries(row).map(([key, value], fieldIndex) => (
+                    <div key={key} className={`grid grid-cols-[92px_minmax(0,1fr)] gap-2 px-3 py-2 ${fieldIndex ? "border-t border-gray-50" : ""}`}>
+                      <dt className="break-words text-[10px] font-bold text-gray-400">{ADMIN_FIELD_LABELS[key] ?? key}</dt>
+                      <dd className="break-all text-[11px] leading-relaxed text-gray-700">{adminValue(value)}</dd>
+                    </div>
+                  ))}
+                  {rowActions(row)}
+                </article>
+              ))}
+            </div>
+          ) : (
+            <div className="rounded-2xl bg-white py-10 text-center text-xs text-gray-400">조회된 데이터가 없습니다.</div>
+          )}
+
+          {databasePage && databasePage.pagination.totalPages > 1 && (
+            <div className="flex items-center justify-center gap-3 pt-1">
+              <button type="button" disabled={page <= 1} onClick={() => setPage((value) => Math.max(1, value - 1))}
+                className="rounded-xl border border-gray-100 bg-white px-4 py-2 text-xs font-bold text-gray-600 disabled:opacity-30">이전</button>
+              <span className="text-xs font-black text-gray-500">{page} / {databasePage.pagination.totalPages}</span>
+              <button type="button" disabled={!databasePage.pagination.hasNext} onClick={() => setPage((value) => value + 1)}
+                className="rounded-xl border border-gray-100 bg-white px-4 py-2 text-xs font-bold text-gray-600 disabled:opacity-30">다음</button>
+            </div>
+          )}
+        </section>
+
+        {dashboard?.recentActions.length ? (
+          <section className="pb-3">
+            <h2 className="mb-2 text-sm font-black text-gray-900">최근 관리자 작업</h2>
+            <div className="overflow-hidden rounded-2xl border border-gray-100 bg-white">
+              {dashboard.recentActions.map((action, index) => (
+                <div key={action.id} className={`px-3 py-3 ${index ? "border-t border-gray-50" : ""}`}>
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="truncate text-xs font-black text-gray-700">{action.action}</p>
+                    <span className="text-[9px] text-gray-300">{formatDate(action.createdAt)}</span>
+                  </div>
+                  <p className="mt-1 truncate text-[10px] text-gray-400">{action.admin.nickname} · {action.targetType} · {action.targetId}</p>
+                </div>
+              ))}
+            </div>
+          </section>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
+function AdminStoreMenusScreen({ stores, onBack }: { stores: ApiStore[]; onBack: () => void }) {
+  const [selectedStore, setSelectedStore] = useState<ApiStore | null>(null);
+  const [keyword, setKeyword] = useState("");
+  const [category, setCategory] = useState<"" | ApiMenuCategory>("");
+  const [menus, setMenus] = useState<ApiAdminStoreMenu[]>([]);
+  const [page, setPage] = useState(1);
+  const [hasNext, setHasNext] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [updating, setUpdating] = useState<Set<string>>(new Set());
+  const [error, setError] = useState<string | null>(null);
+  const [reloadKey, setReloadKey] = useState(0);
+
+  useEffect(() => {
+    if (!selectedStore) return;
+    let active = true;
+    setLoading(true);
+    setError(null);
+    const timer = window.setTimeout(() => {
+      api.adminStoreMenus(selectedStore.id, {
+        ...(category ? { category } : {}),
+        ...(keyword.trim() ? { keyword: keyword.trim() } : {}),
+        page: 1,
+        limit: 100,
+      })
+        .then((result) => {
+          if (!active) return;
+          setMenus(result.items);
+          setPage(1);
+          setHasNext(result.pagination.hasNext);
+        })
+        .catch((reason: unknown) => {
+          if (active) setError(reason instanceof Error ? reason.message : "메뉴를 불러오지 못했습니다.");
+        })
+        .finally(() => {
+          if (active) setLoading(false);
+        });
+    }, keyword ? 250 : 0);
+    return () => {
+      active = false;
+      window.clearTimeout(timer);
+    };
+  }, [category, keyword, reloadKey, selectedStore]);
+
+  async function loadMore() {
+    if (!selectedStore || !hasNext || loadingMore) return;
+    setLoadingMore(true);
+    setError(null);
+    try {
+      const nextPage = page + 1;
+      const result = await api.adminStoreMenus(selectedStore.id, {
+        ...(category ? { category } : {}),
+        ...(keyword.trim() ? { keyword: keyword.trim() } : {}),
+        page: nextPage,
+        limit: 100,
+      });
+      setMenus((current) => [...current, ...result.items]);
+      setPage(nextPage);
+      setHasNext(result.pagination.hasNext);
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "메뉴를 더 불러오지 못했습니다.");
+    } finally {
+      setLoadingMore(false);
+    }
+  }
+
+  async function toggleMenu(menu: ApiAdminStoreMenu) {
+    if (!selectedStore || updating.has(menu.id)) return;
+    const availability = menu.availability === "UNAVAILABLE" ? "AVAILABLE" : "UNAVAILABLE";
+    setUpdating((current) => new Set(current).add(menu.id));
+    setError(null);
+    try {
+      await api.updateAdminStoreMenu(selectedStore.id, menu.id, availability);
+      setMenus((current) => current.map((item) => item.id === menu.id ? { ...item, availability } : item));
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "판매 상태를 변경하지 못했습니다.");
+    } finally {
+      setUpdating((current) => {
+        const next = new Set(current);
+        next.delete(menu.id);
+        return next;
+      });
+    }
+  }
+
+  if (!selectedStore) return (
+    <div className="flex flex-col h-full bg-[#F8F6FF]">
+      <div className="flex items-center px-4 py-3 bg-white border-b border-gray-100 flex-shrink-0">
+        <button type="button" onClick={onBack} className="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center">
+          <ArrowLeft className="w-4 h-4 text-gray-700" />
+        </button>
+        <span className="flex-1 text-center font-black text-sm text-gray-900 -ml-8 pointer-events-none">매장별 메뉴 관리</span>
+      </div>
+      <div className="flex-1 overflow-y-auto px-3 py-3">
+        <div className="mb-3 rounded-2xl border border-purple-100 bg-purple-50 px-4 py-3">
+          <p className="text-sm font-black text-primary">관리할 매장을 선택해주세요</p>
+          <p className="mt-1 text-xs leading-relaxed text-purple-500">모든 공식 메뉴는 기본적으로 판매 중이며, 선택한 매장에서 판매하지 않는 메뉴만 꺼주세요.</p>
+        </div>
+        <StoreBrowser initialStores={stores} onSelect={setSelectedStore} />
+      </div>
+    </div>
+  );
+
+  return (
+    <div className="flex flex-col h-full bg-[#F8F6FF]">
+      <div className="flex items-center px-4 py-3 bg-white border-b border-gray-100 flex-shrink-0">
+        <button type="button" onClick={() => setSelectedStore(null)} className="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center">
+          <ArrowLeft className="w-4 h-4 text-gray-700" />
+        </button>
+        <span className="flex-1 text-center font-black text-sm text-gray-900 -ml-8 pointer-events-none">판매 메뉴 설정</span>
+      </div>
+
+      <div className="flex-1 overflow-y-auto px-3 py-3 space-y-3">
+        <button type="button" onClick={() => setSelectedStore(null)}
+          className="w-full flex items-center gap-3 rounded-2xl border border-yellow-200 bg-yellow-50 p-3.5 text-left">
+          <div className="w-11 h-11 rounded-2xl bg-[#FFE500] text-[#3A1D1D] flex items-center justify-center font-black">M</div>
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-black text-gray-900">{selectedStore.name}</p>
+            <p className="text-xs text-gray-500 truncate mt-0.5">{selectedStore.address}</p>
+          </div>
+          <span className="text-xs font-black text-primary">변경</span>
+        </button>
+
+        <div className="relative">
+          <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-300" />
+          <input type="search" value={keyword} onChange={(event) => setKeyword(event.target.value)}
+            placeholder="메뉴명으로 검색"
+            className="w-full rounded-2xl border border-gray-100 bg-white py-3.5 pl-11 pr-10 text-sm outline-none focus:border-primary" />
+          {keyword && <button type="button" onClick={() => setKeyword("")} aria-label="검색어 지우기"
+            className="absolute right-3 top-1/2 -translate-y-1/2 w-7 h-7 rounded-full bg-gray-100 flex items-center justify-center"><X className="w-3.5 h-3.5 text-gray-400" /></button>}
+        </div>
+
+        <div className="flex gap-1.5 overflow-x-auto pb-1">
+          {(["", "DRINK", "FOOD", "PRODUCT"] as const).map((value) => (
+            <button key={value || "ALL"} type="button" onClick={() => setCategory(value)}
+              className={`flex-shrink-0 rounded-full px-3.5 py-2 text-xs font-black ${category === value ? "bg-primary text-white" : "bg-white text-gray-500 border border-gray-100"}`}>
+              {value ? MENU_CATEGORY_LABELS[value] : "전체"}
+            </button>
+          ))}
+        </div>
+
+        {error && <button type="button" onClick={() => setReloadKey((current) => current + 1)}
+          className="w-full rounded-xl bg-red-50 px-3 py-2.5 text-left text-xs text-red-500">{error} 다시 시도</button>}
+
+        {loading ? (
+          <div className="space-y-2">{[1, 2, 3].map((item) => <div key={item} className="h-20 rounded-2xl bg-white animate-pulse" />)}</div>
+        ) : menus.length === 0 ? (
+          <div className="rounded-2xl bg-white py-12 text-center text-sm text-gray-400">검색된 메뉴가 없어요.</div>
+        ) : (
+          <div className="space-y-2">
+            {menus.map((menu) => {
+              const selling = menu.availability !== "UNAVAILABLE";
+              return (
+                <article key={menu.id} className="flex items-center gap-3 rounded-2xl border border-gray-100 bg-white p-3">
+                  {menu.imageUrl ? <ImageWithFallback src={menu.imageUrl} alt={menu.name} className="w-14 h-14 rounded-xl object-cover bg-gray-50" /> : <div className="w-14 h-14 rounded-xl bg-gray-50 flex items-center justify-center">☕</div>}
+                  <div className="flex-1 min-w-0">
+                    <p className="truncate text-sm font-black text-gray-900">{menuDisplayName(menu)}</p>
+                    <p className="mt-0.5 text-[11px] text-gray-400">{MENU_CATEGORY_LABELS[menu.category]}</p>
+                  </div>
+                  <button type="button" role="switch" aria-checked={selling} disabled={updating.has(menu.id)}
+                    onClick={() => void toggleMenu(menu)}
+                    className={`relative h-7 w-12 rounded-full transition-colors disabled:opacity-50 ${selling ? "bg-primary" : "bg-gray-200"}`}>
+                    <span className={`absolute top-1 h-5 w-5 rounded-full bg-white shadow-sm transition-transform ${selling ? "left-6" : "left-1"}`} />
+                    <span className="sr-only">{selling ? "판매 중" : "판매 중지"}</span>
+                  </button>
+                </article>
+              );
+            })}
+            {hasNext && <button type="button" onClick={() => void loadMore()} disabled={loadingMore}
+              className="w-full rounded-2xl border border-gray-200 bg-white py-3 text-sm font-black text-gray-500 disabled:opacity-50">
+              {loadingMore ? "불러오는 중..." : "메뉴 더 보기"}
+            </button>}
+          </div>
+        )}
       </div>
     </div>
   );
@@ -1999,7 +2964,7 @@ function SavedCard({ deal, onTap, onLike }: { deal: Deal; onTap: () => void; onL
 // ─────────────────────────────────────────────────────────────────────────────
 // My Screen
 // ─────────────────────────────────────────────────────────────────────────────
-function MyScreen({ user, dealCount, reviewCount, pendingReviewCount, favoriteCount, onMyDeals, onParticipations, onReviews, onNotifications, onProfile, onSaved, onAccountSettings, onLogout }: {
+function MyScreen({ user, dealCount, reviewCount, pendingReviewCount, favoriteCount, onMyDeals, onParticipations, onWriteReviews, onReviews, onNotifications, onProfile, onSaved, onAccountSettings, onAdminDashboard, onLogout }: {
   user: AuthUser | null;
   dealCount: number;
   reviewCount: number;
@@ -2007,11 +2972,13 @@ function MyScreen({ user, dealCount, reviewCount, pendingReviewCount, favoriteCo
   favoriteCount: number;
   onMyDeals: () => void;
   onParticipations: () => void;
+  onWriteReviews: () => void;
   onReviews: () => void;
   onNotifications: () => void;
   onProfile: () => void;
   onSaved: () => void;
   onAccountSettings: () => void;
+  onAdminDashboard: () => void;
   onLogout: () => void;
 }) {
   return (
@@ -2079,7 +3046,7 @@ function MyScreen({ user, dealCount, reviewCount, pendingReviewCount, favoriteCo
         </div>
 
         {pendingReviewCount > 0 && (
-          <button type="button" onClick={onReviews}
+          <button type="button" onClick={onWriteReviews}
             className="mx-4 mt-3 w-[calc(100%-2rem)] flex items-center gap-3 rounded-2xl bg-gradient-to-r from-primary to-purple-500 px-4 py-3.5 text-left shadow-sm shadow-purple-200 active:scale-[0.99] transition-transform">
             <div className="w-10 h-10 rounded-full bg-white/20 flex items-center justify-center flex-shrink-0">
               <Star className="w-5 h-5 fill-yellow-300 text-yellow-300" />
@@ -2093,11 +3060,26 @@ function MyScreen({ user, dealCount, reviewCount, pendingReviewCount, favoriteCo
         )}
 
         {/* menu */}
+        {user?.role === "ADMIN" && (
+          <button type="button" onClick={onAdminDashboard}
+            className="mx-4 mt-3 w-[calc(100%-2rem)] flex items-center gap-3 rounded-2xl border border-purple-100 bg-purple-50 px-4 py-3.5 text-left active:scale-[0.99] transition-transform">
+            <div className="w-10 h-10 rounded-xl bg-primary flex items-center justify-center">
+              <LayoutDashboard className="w-5 h-5 text-white" />
+            </div>
+            <div className="flex-1">
+              <p className="text-sm font-black text-primary">관리자 대시보드</p>
+              <p className="text-[11px] text-purple-400 mt-0.5">서비스 현황, DB 데이터, 매장 메뉴를 관리해요.</p>
+            </div>
+            <ChevronRight className="w-4 h-4 text-primary" />
+          </button>
+        )}
+
         <div className="mx-4 mt-3 bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden mb-6">
           {[
             { icon: PenSquare, label: "내 모집 관리",   onTap: onMyDeals,        highlight: true },
             { icon: Ticket,    label: "내가 참여한 모집", onTap: onParticipations, highlight: false },
-            { icon: Star,      label: "후기 관리",       onTap: onReviews,        highlight: pendingReviewCount > 0 },
+            { icon: MessageCircle, label: "후기 작성",     onTap: onWriteReviews,   highlight: pendingReviewCount > 0 },
+            { icon: Star,      label: "후기 관리",       onTap: onReviews,        highlight: false },
             { icon: Heart,     label: "찜한 목록",      onTap: onSaved,          highlight: false },
             { icon: Bell,      label: "알림",           onTap: onNotifications },
             { icon: User,      label: "계정 설정",      onTap: onAccountSettings },
@@ -2959,36 +3941,35 @@ function SearchResultCard({ deal, onTap, onLike }: {
 // ─────────────────────────────────────────────────────────────────────────────
 // 알림 Screen
 // ─────────────────────────────────────────────────────────────────────────────
-interface AppNotif {
-  id: number;
-  type: "new_post" | "closed" | "review" | "admin";
-  title: string;
-  subtitle: string;
-  time: string;
-  read: boolean;
-}
+function NotificationScreen({ notifications, loading, error, onBack, onRefresh, onReadAll, onOpen }: {
+  notifications: ApiNotification[];
+  loading: boolean;
+  error: string | null;
+  onBack: () => void;
+  onRefresh: () => void;
+  onReadAll: () => Promise<void>;
+  onOpen: (notification: ApiNotification) => Promise<void>;
+}) {
+  const [openingId, setOpeningId] = useState<string | null>(null);
 
-function NotificationScreen({ onBack }: { onBack: () => void }) {
-  const [notifs, setNotifs] = useState<AppNotif[]>([]);
-
-  function markAllRead() {
-    setNotifs(prev => prev.map(n => ({ ...n, read: true })));
+  async function open(notification: ApiNotification) {
+    setOpeningId(notification.id);
+    try {
+      await onOpen(notification);
+    } finally {
+      setOpeningId(null);
+    }
   }
 
-  const iconFor = (type: AppNotif["type"]) => {
-    if (type === "new_post") return (
+  const iconFor = (type: ApiNotification["type"]) => {
+    if (type === "PARTICIPATION_CREATED") return (
       <div className="w-11 h-11 rounded-full bg-purple-100 flex items-center justify-center flex-shrink-0">
-        <Plus className="w-5 h-5 text-primary" />
+        <Users className="w-5 h-5 text-primary" />
       </div>
     );
-    if (type === "closed") return (
-      <div className="w-11 h-11 rounded-full bg-pink-100 flex items-center justify-center flex-shrink-0">
-        <Heart className="w-5 h-5 text-pink-500" />
-      </div>
-    );
-    if (type === "review") return (
+    if (type === "PURCHASE_REQUEST_ACCEPTED") return (
       <div className="w-11 h-11 rounded-full bg-yellow-100 flex items-center justify-center flex-shrink-0">
-        <Star className="w-5 h-5 fill-yellow-400 text-yellow-400" />
+        <CheckCircle className="w-5 h-5 text-yellow-600" />
       </div>
     );
     return (
@@ -3007,8 +3988,8 @@ function NotificationScreen({ onBack }: { onBack: () => void }) {
           <ArrowLeft className="w-4 h-4 text-gray-700" />
         </button>
         <span className="flex-1 text-center font-black text-sm text-gray-900 -ml-8 pointer-events-none">알림</span>
-        {notifs.length > 0 && (
-          <button onClick={markAllRead} className="text-xs font-semibold text-primary">
+        {notifications.some((notification) => !notification.readAt) && (
+          <button onClick={() => void onReadAll()} className="text-xs font-semibold text-primary">
             전체 읽음
           </button>
         )}
@@ -3016,28 +3997,43 @@ function NotificationScreen({ onBack }: { onBack: () => void }) {
 
       {/* list */}
       <div className="flex-1 overflow-y-auto">
-        {notifs.length === 0 ? (
+        {loading && notifications.length === 0 ? (
+          <div className="flex flex-col items-center justify-center h-full gap-3">
+            <RefreshCw className="w-9 h-9 animate-spin text-purple-200" />
+            <p className="text-sm font-bold text-gray-400">알림을 불러오는 중...</p>
+          </div>
+        ) : error && notifications.length === 0 ? (
+          <div className="flex flex-col items-center justify-center h-full gap-3 px-8 text-center">
+            <Bell className="w-12 h-12 text-red-100" />
+            <p className="text-sm font-bold text-gray-500">{error}</p>
+            <button type="button" onClick={onRefresh}
+              className="rounded-xl bg-primary px-4 py-2 text-xs font-black text-white">다시 시도</button>
+          </div>
+        ) : notifications.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-full gap-3">
             <Bell className="w-12 h-12 text-gray-200" />
-            <p className="text-sm font-bold text-gray-500">알림 기능을 준비하고 있어요</p>
-            <p className="text-xs text-gray-300 text-center leading-relaxed">현재 요청 상태와 참여 내역은<br />각 목록 화면에서 확인해주세요.</p>
+            <p className="text-sm font-bold text-gray-500">새 알림이 없어요</p>
+            <p className="text-xs text-gray-300 text-center leading-relaxed">요청 수락과 모집 참여 소식을<br />여기에서 알려드릴게요.</p>
           </div>
-        ) : notifs.map((n, i) => (
-          <button key={n.id}
-            onClick={() => setNotifs(prev => prev.map(x => x.id === n.id ? { ...x, read: true } : x))}
+        ) : notifications.map((notification, index) => (
+          <button key={notification.id}
+            disabled={openingId === notification.id}
+            onClick={() => void open(notification)}
             className={`w-full flex items-start gap-3 px-4 py-4 text-left transition-colors ${
-              !n.read ? "bg-purple-50/60" : "bg-white"
-            } ${i < notifs.length - 1 ? "border-b border-gray-50" : ""}`}>
-            {iconFor(n.type)}
+              !notification.readAt ? "bg-purple-50/60" : "bg-white"
+            } ${index < notifications.length - 1 ? "border-b border-gray-50" : ""}`}>
+            {iconFor(notification.type)}
             <div className="flex-1 min-w-0">
               <div className="flex items-start justify-between gap-2">
-                <p className={`text-sm leading-snug ${!n.read ? "font-bold text-gray-900" : "font-semibold text-gray-600"}`}>
-                  {n.title}
+                <p className={`text-sm leading-snug ${!notification.readAt ? "font-bold text-gray-900" : "font-semibold text-gray-600"}`}>
+                  {notification.title}
                 </p>
-                {!n.read && <div className="w-2 h-2 rounded-full bg-primary flex-shrink-0 mt-1.5" />}
+                {!notification.readAt && <div className="w-2 h-2 rounded-full bg-primary flex-shrink-0 mt-1.5" />}
               </div>
-              <p className="text-xs text-gray-400 mt-0.5">{n.subtitle}</p>
-              <p className="text-[11px] text-gray-300 mt-1">{n.time}</p>
+              <p className="text-xs text-gray-400 mt-0.5 leading-relaxed">{notification.message}</p>
+              <p className="text-[11px] text-gray-300 mt-1">
+                {formatDate(notification.createdAt)} {formatTime(notification.createdAt)}
+              </p>
             </div>
           </button>
         ))}
@@ -3342,7 +4338,8 @@ function MyParticipationsScreen({ participations, deals: dealList, reviews, onBa
                     </span>
                   </div>
                   <p className="text-lg font-black text-red-500 leading-tight mt-0.5">{disc}% 할인</p>
-                  <p className="text-xs text-gray-400">{p.qty}잔 주문 · {p.orderedAt}</p>
+                  <p className="text-xs text-gray-500">{p.menu ? `${p.menu} · ` : ""}{p.qty}잔</p>
+                  <p className="text-xs text-gray-400">{p.orderedAt} 신청</p>
                   <p className="text-xs text-gray-400">모집자: {deal.fan.name}</p>
                 </div>
               </div>
@@ -3379,7 +4376,8 @@ function MyParticipationsScreen({ participations, deals: dealList, reviews, onBa
 // ─────────────────────────────────────────────────────────────────────────────
 // 작성한 후기 목록 / 상세 Screen
 // ─────────────────────────────────────────────────────────────────────────────
-function MyReviewsScreen({ reviews, participations, deals: dealList, onBack, onSelect, onWriteReview }: {
+function MyReviewsScreen({ mode, reviews, participations, deals: dealList, onBack, onSelect, onWriteReview }: {
+  mode: "write" | "manage";
   reviews: Review[];
   participations: Participation[];
   deals: Deal[];
@@ -3401,11 +4399,13 @@ function MyReviewsScreen({ reviews, participations, deals: dealList, onBack, onS
           className="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center">
           <ArrowLeft className="w-4 h-4 text-gray-700" />
         </button>
-        <span className="flex-1 text-center font-black text-sm text-gray-900 -ml-8 pointer-events-none">후기 관리</span>
+        <span className="flex-1 text-center font-black text-sm text-gray-900 -ml-8 pointer-events-none">
+          {mode === "write" ? "후기 작성" : "후기 관리"}
+        </span>
       </div>
 
       <div className="flex-1 overflow-y-auto bg-[#F8F6FF] px-3 py-3 space-y-3">
-        {reviewableDeals.length > 0 && (
+        {mode === "write" && reviewableDeals.length > 0 && (
           <section className="space-y-2" aria-labelledby="reviewable-title">
             <div className="flex items-center justify-between px-1 pt-1">
               <h2 id="reviewable-title" className="text-sm font-black text-gray-800">작성 가능한 후기</h2>
@@ -3418,7 +4418,7 @@ function MyReviewsScreen({ reviews, participations, deals: dealList, onBack, onS
                 </div>
                 <div className="flex-1 min-w-0">
                   <p className="text-xs text-gray-400 font-semibold truncate">{deal.franchise} · {participation.pickupStore}</p>
-                  <p className="text-sm font-black text-gray-800 truncate">{participation.qty}잔 참여 · 모집 종료</p>
+                  <p className="text-sm font-black text-gray-800 truncate">{participation.menu ? `${participation.menu} · ` : ""}{participation.qty}잔 참여</p>
                   <p className="text-[11px] text-gray-400 mt-0.5">모집자 {deal.fan.name}님은 어떠셨나요?</p>
                 </div>
                 <button type="button" onClick={() => onWriteReview(deal)}
@@ -3430,22 +4430,26 @@ function MyReviewsScreen({ reviews, participations, deals: dealList, onBack, onS
           </section>
         )}
 
-        {reviews.length > 0 && (
+        {mode === "manage" && reviews.length > 0 && (
           <div className="flex items-center justify-between px-1 pt-2">
             <h2 className="text-sm font-black text-gray-800">작성 완료</h2>
             <span className="text-[11px] text-gray-400">{reviews.length}개</span>
           </div>
         )}
 
-        {reviews.length === 0 && reviewableDeals.length === 0 ? (
+        {(mode === "write" ? reviewableDeals.length === 0 : reviews.length === 0) ? (
           <div className="flex flex-col items-center py-16 gap-3">
             <span className="text-5xl">⭐</span>
             <div className="text-center">
-              <p className="text-sm font-bold text-gray-500">관리할 후기가 없어요</p>
-              <p className="text-xs text-gray-400 mt-1">참여한 모집이 종료되면 이곳에서 후기를 쓸 수 있어요.</p>
+              <p className="text-sm font-bold text-gray-500">
+                {mode === "write" ? "작성 가능한 후기가 없어요" : "작성한 후기가 없어요"}
+              </p>
+              <p className="text-xs text-gray-400 mt-1">
+                {mode === "write" ? "참여한 모집이 종료되면 후기를 쓸 수 있어요." : "후기를 작성하면 이곳에서 관리할 수 있어요."}
+              </p>
             </div>
           </div>
-        ) : reviews.map(r => {
+        ) : mode === "manage" ? reviews.map(r => {
           const deal = dealList.find(d => String(d.id) === String(r.dealId));
           if (!deal) return null;
           return (
@@ -3467,7 +4471,7 @@ function MyReviewsScreen({ reviews, participations, deals: dealList, onBack, onS
               <ChevronRight className="w-4 h-4 text-gray-300 flex-shrink-0 self-center" />
             </button>
           );
-        })}
+        }) : null}
       </div>
     </div>
   );
@@ -3695,8 +4699,8 @@ export default function App() {
   const [dataError,    setDataError]    = useState<string | null>(null);
   const [selectedDeal, setSelectedDeal] = useState<Deal | null>(null);
   const [orderDeal,    setOrderDeal]    = useState<Deal | null>(null);
-  const [mySubView,    setMySubView]    = useState<"main" | "mydeals" | "participations" | "reviews">("main");
-  const [topScreen,    setTopScreen]    = useState<null | "notifications" | "guide" | "event" | "search" | "stores" | "report" | "profile" | "account-settings" | "contact">(null);
+  const [mySubView,    setMySubView]    = useState<"main" | "mydeals" | "participations" | "review-write" | "reviews">("main");
+  const [topScreen,    setTopScreen]    = useState<null | "notifications" | "guide" | "event" | "search" | "stores" | "report" | "profile" | "account-settings" | "contact" | "admin-dashboard" | "admin-menus">(null);
   const [searchQuery,  setSearchQuery]  = useState("");
   const [myReviews,        setMyReviews]        = useState<Review[]>([]);
   const [participations, setParticipations] = useState<Participation[]>([]);
@@ -3705,7 +4709,13 @@ export default function App() {
   const [requests,          setRequests]          = useState<BuyRequest[]>([]);
   const [selectedRequest,   setSelectedRequest]   = useState<BuyRequest | null>(null);
   const [postingRequest,    setPostingRequest]    = useState(false);
+  const [editingRequest,    setEditingRequest]    = useState<BuyRequest | null>(null);
+  const [listInitialBoard,  setListInitialBoard]  = useState<"deals" | "requests">("deals");
   const [createSheetOpen,   setCreateSheetOpen]   = useState(false);
+  const [notifications, setNotifications] = useState<ApiNotification[]>([]);
+  const [unreadNotificationCount, setUnreadNotificationCount] = useState(0);
+  const [notificationsLoading, setNotificationsLoading] = useState(false);
+  const [notificationsError, setNotificationsError] = useState<string | null>(null);
 
   // ── auth ──────────────────────────────────────────────────────────────────
   useEffect(() => {
@@ -3734,11 +4744,24 @@ export default function App() {
       });
   }, []);
 
+  useEffect(() => {
+    if (authView !== "app") return;
+    const poll = () => {
+      if (document.visibilityState === "visible") void refreshNotifications(true);
+    };
+    const timer = window.setInterval(poll, 30_000);
+    document.addEventListener("visibilitychange", poll);
+    return () => {
+      window.clearInterval(timer);
+      document.removeEventListener("visibilitychange", poll);
+    };
+  }, [authView]);
+
   async function loadAppData(user: AuthUser): Promise<void> {
     setDataLoading(true);
     setDataError(null);
     try {
-      const [postPage, favoritePage, storePage, eventPage, participationPage, reviewPage, requestPage, myPostPage] =
+      const [postPage, favoritePage, storePage, eventPage, participationPage, reviewPage, requestPage, myPostPage, notificationPage] =
         await Promise.all([
           api.posts(),
           api.favorites(),
@@ -3748,6 +4771,7 @@ export default function App() {
           api.myReviews(),
           api.purchaseRequests(),
           api.myPosts(),
+          api.notifications(),
         ]);
       const favoriteIds = new Set(favoritePage.items.map((item) => item.post.id));
       const nextDeals = postPage.items.map((post) => dealFromApi(post, favoriteIds.has(post.id)));
@@ -3766,7 +4790,10 @@ export default function App() {
           .map((item) => ({
             id: item.id,
             dealId: item.postId,
+            pickupStoreId: item.pickupStoreId,
+            menuId: item.menuId,
             pickupStore: item.pickupStore,
+            menu: item.menu,
             qty: item.quantity,
             orderedAt: formatDate(item.createdAt),
             received: item.post.status === "CLOSED",
@@ -3774,6 +4801,8 @@ export default function App() {
       );
       setMyReviews(reviewPage.items.map(reviewFromApi));
       setRequests(requestPage.items.map(requestFromApi));
+      setNotifications(notificationPage.items);
+      setUnreadNotificationCount(notificationPage.unreadCount);
       setAuthUser(user);
       const sharedPostId = new URLSearchParams(window.location.search).get("post");
       const sharedDeal = nextDeals.find((deal) => String(deal.id) === sharedPostId);
@@ -3785,6 +4814,66 @@ export default function App() {
       setDataError(error instanceof Error ? error.message : "데이터를 불러오지 못했습니다.");
     } finally {
       setDataLoading(false);
+    }
+  }
+
+  async function refreshNotifications(silent = false): Promise<void> {
+    if (!silent) setNotificationsLoading(true);
+    setNotificationsError(null);
+    try {
+      const page = await api.notifications();
+      setNotifications(page.items);
+      setUnreadNotificationCount(page.unreadCount);
+    } catch (reason) {
+      setNotificationsError(reason instanceof Error ? reason.message : "알림을 불러오지 못했습니다.");
+    } finally {
+      if (!silent) setNotificationsLoading(false);
+    }
+  }
+
+  async function handleReadNotification(notification: ApiNotification): Promise<void> {
+    if (notification.readAt) return;
+    const optimisticReadAt = new Date().toISOString();
+    setNotifications((current) => current.map((item) => item.id === notification.id ? { ...item, readAt: optimisticReadAt } : item));
+    setUnreadNotificationCount((current) => Math.max(0, current - 1));
+    try {
+      const updated = await api.readNotification(notification.id);
+      setNotifications((current) => current.map((item) => item.id === updated.id ? updated : item));
+    } catch (reason) {
+      setNotifications((current) => current.map((item) => item.id === notification.id ? notification : item));
+      setUnreadNotificationCount((current) => current + 1);
+      setNotificationsError(reason instanceof Error ? reason.message : "알림을 읽음 처리하지 못했습니다.");
+    }
+  }
+
+  async function handleReadAllNotifications(): Promise<void> {
+    const previous = notifications;
+    setNotifications((current) => current.map((item) => item.readAt ? item : { ...item, readAt: new Date().toISOString() }));
+    setUnreadNotificationCount(0);
+    try {
+      await api.readAllNotifications();
+    } catch (reason) {
+      setNotifications(previous);
+      setUnreadNotificationCount(previous.filter((item) => !item.readAt).length);
+      setNotificationsError(reason instanceof Error ? reason.message : "알림을 읽음 처리하지 못했습니다.");
+    }
+  }
+
+  async function handleOpenNotification(notification: ApiNotification): Promise<void> {
+    await handleReadNotification(notification);
+    setTopScreen(null);
+    if (notification.resourceType === "PurchaseRequest") {
+      try {
+        setSelectedRequest(requestFromApi(await api.purchaseRequest(notification.resourceId)));
+      } catch (reason) {
+        setDataError(reason instanceof Error ? reason.message : "구매 요청을 불러오지 못했습니다.");
+      }
+      return;
+    }
+    if (notification.resourceType === "Post") {
+      const deal = deals.find((item) => String(item.id) === notification.resourceId);
+      if (deal) await handleSelectDeal(deal);
+      else setDataError("해당 모집글이 삭제되었거나 더 이상 조회할 수 없습니다.");
     }
   }
 
@@ -3819,10 +4908,10 @@ export default function App() {
       setDataError(error instanceof Error ? error.message : "찜 상태를 변경하지 못했습니다.");
     }
   }
-  async function handleOrderConfirm(qty: number, pickupStore: string) {
+  async function handleOrderConfirm(qty: number, pickupStoreId: string, menuId: string) {
     if (!orderDeal) return;
     try {
-      const created = await api.participate(String(orderDeal.id), qty, pickupStore);
+      const created = await api.participate(String(orderDeal.id), qty, pickupStoreId, menuId);
       const updatedDeal = dealFromApi(created.post, orderDeal.liked);
       setDeals(prev => prev.map(d => d.id === orderDeal.id ? updatedDeal : d));
       setSelectedDeal(updatedDeal);
@@ -3830,7 +4919,10 @@ export default function App() {
         {
           id: created.id,
           dealId: created.postId,
+          pickupStoreId: created.pickupStoreId,
+          menuId: created.menuId,
           pickupStore: created.pickupStore,
+          menu: created.menu,
           qty: created.quantity,
           orderedAt: formatDate(created.createdAt),
           received: created.post.status === "CLOSED",
@@ -3871,6 +4963,19 @@ export default function App() {
     await api.cancelPurchaseRequest(String(id));
     setRequests((current) => current.filter((request) => request.id !== id));
     setSelectedRequest(null);
+  }
+
+  async function handleUpdateRequest(id: BuyRequest["id"], value: RequestFormValue): Promise<void> {
+    const updated = requestFromApi(await api.updatePurchaseRequest(String(id), {
+      storeId: value.storeId,
+      menuId: value.menuId,
+      quantity: value.qty,
+      desiredTime: value.desiredTime,
+      note: value.note || null,
+      openChatUrl: value.kakaoLink,
+    }));
+    setRequests((current) => current.map((request) => request.id === id ? updated : request));
+    setSelectedRequest(updated);
   }
 
   async function handleSelectDeal(deal: Deal): Promise<void> {
@@ -3980,12 +5085,26 @@ export default function App() {
       setEvents([]);
       setParticipations([]);
       setRequests([]);
+      setNotifications([]);
+      setUnreadNotificationCount(0);
+      setSelectedRequest(null);
+      setEditingRequest(null);
     }
   }
 
   // ── top-level overlays ───────────────────────────────────────────────────
   if (topScreen === "notifications") return (
-    <Shell><NotificationScreen onBack={() => setTopScreen(null)} /></Shell>
+    <Shell>
+      <NotificationScreen
+        notifications={notifications}
+        loading={notificationsLoading}
+        error={notificationsError}
+        onBack={() => setTopScreen(null)}
+        onRefresh={() => void refreshNotifications()}
+        onReadAll={handleReadAllNotifications}
+        onOpen={handleOpenNotification}
+      />
+    </Shell>
   );
   if (topScreen === "guide") return (
     <Shell><GuideScreen onBack={() => setTopScreen(null)} /></Shell>
@@ -4007,6 +5126,17 @@ export default function App() {
   if (topScreen === "stores") return (
     <Shell><StoreDirectoryScreen initialStores={stores} onBack={() => setTopScreen(null)} /></Shell>
   );
+  if (topScreen === "admin-dashboard" && authUser?.role === "ADMIN") return (
+    <Shell>
+      <AdminDashboardScreen
+        onBack={() => setTopScreen(null)}
+        onMenus={() => setTopScreen("admin-menus")}
+      />
+    </Shell>
+  );
+  if (topScreen === "admin-menus" && authUser?.role === "ADMIN") return (
+    <Shell><AdminStoreMenusScreen stores={stores} onBack={() => setTopScreen("admin-dashboard")} /></Shell>
+  );
   if (topScreen === "report" && selectedDeal) return (
     <Shell><ReportScreen deal={selectedDeal} onBack={() => setTopScreen(null)} /></Shell>
   );
@@ -4024,16 +5154,30 @@ export default function App() {
   if (tab === "post") return (
     <Shell><PostScreen stores={stores} onBack={() => setTab("home")} onSubmit={handleCreatePost} /></Shell>
   );
+  if (editingRequest) return (
+    <Shell>
+      <RequestPostScreen
+        stores={stores}
+        initialRequest={editingRequest}
+        onBack={() => setEditingRequest(null)}
+        onSubmit={(value) => handleUpdateRequest(editingRequest.id, value)}
+      />
+    </Shell>
+  );
   if (postingRequest) return (
     <Shell>
       <RequestPostScreen
         stores={stores}
         onBack={() => setPostingRequest(false)}
+        onComplete={() => {
+          setPostingRequest(false);
+          setListInitialBoard("requests");
+          setTab("list");
+        }}
         onSubmit={async req => {
           const created = await api.createPurchaseRequest({
-            city: req.city,
-            branch: req.branch,
-            menu: req.menu,
+            storeId: req.storeId,
+            menuId: req.menuId,
             quantity: req.qty,
             desiredTime: req.desiredTime,
             ...(req.note ? { note: req.note } : {}),
@@ -4053,6 +5197,7 @@ export default function App() {
         onBack={() => setSelectedRequest(null)}
         onAccept={() => handleAcceptRequest(selectedRequest.id)}
         onCancel={() => handleCancelRequest(selectedRequest.id)}
+        onEdit={selectedRequest.requesterId === authUser?.id ? () => setEditingRequest(selectedRequest) : undefined}
       />
     </Shell>
   );
@@ -4092,6 +5237,19 @@ export default function App() {
       />
     </Shell>
   );
+  if (tab === "my" && mySubView === "review-write") return (
+    <Shell>
+      <MyReviewsScreen
+        mode="write"
+        reviews={myReviews}
+        participations={participations}
+        deals={deals}
+        onBack={() => setMySubView("main")}
+        onSelect={r => setSelectedReview(r)}
+        onWriteReview={deal => setReviewTargetDeal(deal)}
+      />
+    </Shell>
+  );
   if (tab === "my" && mySubView === "reviews") {
     if (selectedReview) {
       const deal = deals.find(d => String(d.id) === String(selectedReview.dealId));
@@ -4102,6 +5260,7 @@ export default function App() {
     return (
       <Shell>
         <MyReviewsScreen
+          mode="manage"
           reviews={myReviews}
           participations={participations}
           deals={deals}
@@ -4126,7 +5285,7 @@ export default function App() {
           onReport={live.writerId === authUser?.id ? undefined : () => setTopScreen("report")}
         />
         {orderDeal && (
-          <OrderModal deal={orderDeal} onClose={() => setOrderDeal(null)} onConfirm={handleOrderConfirm} />
+          <OrderModal deal={orderDeal} stores={stores} onClose={() => setOrderDeal(null)} onConfirm={handleOrderConfirm} />
         )}
       </Shell>
     );
@@ -4144,9 +5303,14 @@ export default function App() {
               className="w-9 h-9 flex items-center justify-center rounded-full">
               <Search style={{ width: 20, height: 20 }} className="text-gray-600" />
             </button>
-            <button onClick={() => setTopScreen("notifications")}
+            <button onClick={() => { setTopScreen("notifications"); void refreshNotifications(); }}
               className="w-9 h-9 flex items-center justify-center rounded-full relative">
               <Bell style={{ width: 20, height: 20 }} className="text-gray-600" />
+              {unreadNotificationCount > 0 && (
+                <span className="absolute right-0 top-0 flex h-4 min-w-4 items-center justify-center rounded-full bg-pink-500 px-1 text-[9px] font-black text-white">
+                  {unreadNotificationCount > 9 ? "9+" : unreadNotificationCount}
+                </span>
+              )}
             </button>
           </div>
         </div>
@@ -4174,10 +5338,10 @@ export default function App() {
           </div>
         ) : (
           <>
-            {tab === "home"  && <HomeScreen deals={deals} onSelect={d => void handleSelectDeal(d)} onLike={handleLike} onGuide={() => setTopScreen("guide")} onEvent={() => setTopScreen("event")} onSearch={q => { setSearchQuery(q); setTopScreen("search"); }} onList={() => setTab("list")} onContact={() => setTopScreen("contact")} onStores={() => setTopScreen("stores")} />}
-            {tab === "list"  && <ListScreen deals={deals} onSelect={d => void handleSelectDeal(d)} onLike={handleLike} requests={requests} onRequestSelect={request => void handleSelectRequest(request)} />}
+            {tab === "home"  && <HomeScreen deals={deals} onSelect={d => void handleSelectDeal(d)} onLike={handleLike} onGuide={() => setTopScreen("guide")} onEvent={() => setTopScreen("event")} onSearch={q => { setSearchQuery(q); setTopScreen("search"); }} onList={() => { setListInitialBoard("deals"); setTab("list"); }} onContact={() => setTopScreen("contact")} onStores={() => setTopScreen("stores")} />}
+            {tab === "list"  && <ListScreen deals={deals} onSelect={d => void handleSelectDeal(d)} onLike={handleLike} requests={requests} initialBoard={listInitialBoard} onRequestSelect={request => void handleSelectRequest(request)} />}
             {tab === "saved" && <SavedScreen deals={deals} onSelect={d => void handleSelectDeal(d)} onLike={handleLike} />}
-            {tab === "my" && mySubView === "main" && <MyScreen user={authUser} dealCount={myDeals.length} reviewCount={myReviews.length} pendingReviewCount={participations.filter(participation => participation.received && !myReviews.some(review => String(review.dealId) === String(participation.dealId))).length} favoriteCount={deals.filter(deal => deal.liked).length} onMyDeals={() => setMySubView("mydeals")} onParticipations={() => setMySubView("participations")} onReviews={() => setMySubView("reviews")} onNotifications={() => setTopScreen("notifications")} onProfile={() => setTopScreen("profile")} onSaved={() => { setTab("saved"); setMySubView("main"); }} onAccountSettings={() => setTopScreen("account-settings")} onLogout={() => void handleLogout()} />}
+            {tab === "my" && mySubView === "main" && <MyScreen user={authUser} dealCount={myDeals.length} reviewCount={myReviews.length} pendingReviewCount={participations.filter(participation => participation.received && !myReviews.some(review => String(review.dealId) === String(participation.dealId))).length} favoriteCount={deals.filter(deal => deal.liked).length} onMyDeals={() => setMySubView("mydeals")} onParticipations={() => setMySubView("participations")} onWriteReviews={() => setMySubView("review-write")} onReviews={() => setMySubView("reviews")} onNotifications={() => { setTopScreen("notifications"); void refreshNotifications(); }} onProfile={() => setTopScreen("profile")} onSaved={() => { setTab("saved"); setMySubView("main"); }} onAccountSettings={() => setTopScreen("account-settings")} onAdminDashboard={() => setTopScreen("admin-dashboard")} onLogout={() => void handleLogout()} />}
           </>
         )}
       </main>
@@ -4186,7 +5350,7 @@ export default function App() {
       <nav className="flex-shrink-0 bg-white border-t border-gray-100">
         <div className="flex items-center h-16">
           <BotBtn active={tab === "home"}  label="홈"       icon={HomeIcon}  onTap={() => setTab("home")} />
-          <BotBtn active={tab === "list"}  label="모집 목록" icon={ListIcon}  onTap={() => setTab("list")} />
+          <BotBtn active={tab === "list"}  label="모집 목록" icon={ListIcon}  onTap={() => { setListInitialBoard("deals"); setTab("list"); }} />
           <div className="flex-1 flex justify-center items-center">
             <button onClick={() => setCreateSheetOpen(true)}
               className="w-12 h-12 -mt-5 bg-primary rounded-full flex items-center justify-center shadow-lg shadow-primary/30">
