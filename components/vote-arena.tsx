@@ -89,7 +89,7 @@ const DISPLAY = {
   dip: {
     label: "이채영",
     eyebrow: "CY",
-    photo: "/images/chaeyoung.webp",
+    photo: "/images/chaeyoung.jpg",
     accent: "#fb7185",
     emoji: "💗",
     registeredText: "이채영 최애로 등록!",
