@@ -87,22 +87,22 @@ type Burst = {
 
 const DISPLAY = {
   dip: {
-    label: "이채영",
-    eyebrow: "CY",
-    photo: "/images/chaeyoung.jpg",
-    accent: "#fb7185",
-    emoji: "💗",
-    registeredText: "이채영 최애로 등록!",
-    burstTokens: ["이채영", "💗", "화이팅!", "CHAEYOUNG", "최고"],
+    label: "엄성현",
+    eyebrow: "SH",
+    photo: "/images/seonghyun.webp",
+    accent: "#f43f5e",
+    emoji: "🔥",
+    registeredText: "엄성현 최애로 등록!",
+    burstTokens: ["엄성현", "🔥", "화이팅!", "SEONGHYUN", "최고"],
   },
   pour: {
-    label: "백지헌",
-    eyebrow: "JH",
-    photo: "/images/jiheon.webp",
-    accent: "#fcd34d",
-    emoji: "💛",
-    registeredText: "백지헌 최애로 등록!",
-    burstTokens: ["백지헌", "💛", "사랑해", "JIHEON", "취향저격"],
+    label: "안건호",
+    eyebrow: "GH",
+    photo: "/images/geonho.webp",
+    accent: "#a8b8dc",
+    emoji: "🩵",
+    registeredText: "안건호 최애로 등록!",
+    burstTokens: ["안건호", "🩵", "사랑해", "GEONHO", "취향저격"],
   },
 } as const;
 
@@ -1319,7 +1319,7 @@ export function VoteArena({
     try {
       const { url, generated } = await resolveShareUrl();
       const shareData = {
-        title: "이채영 vs 백지헌",
+        title: "엄성현 vs 안건호",
         text: shareMessage(lastAcceptedChoice),
         url,
       };
@@ -1427,15 +1427,15 @@ export function VoteArena({
             <span aria-hidden="true">🔥</span>
             <div>
               <strong>친구가 당신의 최애를 기다리고 있어요</strong>
-              <p>이채영과 백지헌, 누가 최애인지 골라 주세요!</p>
+              <p>엄성현과 안건호, 누가 최애인지 골라 주세요!</p>
             </div>
           </aside>
         ) : null}
 
         <div className="text-center mb-8">
           <p className="km-badge">⚡ 오늘의 밸런스게임 ⚡</p>
-          <h1 id="game-title" className="km-title">이채영 vs 백지헌</h1>
-          <p className="km-worldcup">💗 FROMIS_9 · 최애 픽 💗</p>
+          <h1 id="game-title" className="km-title">엄성현 vs 안건호</h1>
+          <p className="km-worldcup">🔥 CORTIS · 최애 픽 🩵</p>
           <p className="km-subtitle">여러 번 클릭 가능 · 최애를 계속 눌러봐</p>
         </div>
 

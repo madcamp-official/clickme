@@ -12,18 +12,18 @@ function metadataBase(): URL {
 
 export const metadata: Metadata = {
   metadataBase: metadataBase(),
-  title: "이채영 vs 백지헌 — 오늘의 밸런스게임",
-  description: "FROMIS_9 이채영과 백지헌, 최애를 계속 눌러 참여하세요.",
+  title: "엄성현 vs 안건호 — 오늘의 밸런스게임",
+  description: "CORTIS 엄성현과 안건호, 최애를 계속 눌러 참여하세요.",
   openGraph: {
-    title: "이채영 vs 백지헌 — 오늘의 밸런스게임",
-    description: "이채영? 백지헌? 최애를 계속 눌러 보세요.",
+    title: "엄성현 vs 안건호 — 오늘의 밸런스게임",
+    description: "엄성현? 안건호? 최애를 계속 눌러 보세요.",
     type: "website",
     locale: "ko_KR",
     siteName: "오늘의 밸런스게임",
   },
   twitter: {
     card: "summary",
-    title: "이채영 vs 백지헌",
+    title: "엄성현 vs 안건호",
     description: "최애를 계속 눌러 보세요.",
   },
 };
