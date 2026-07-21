@@ -24,6 +24,10 @@ export const shareImageCapacity = new CapacityGate(8);
 export const commentCapacity = new CapacityGate(12);
 export const commentReadCapacity = new CapacityGate(16);
 export const topicHistoryCapacity = new CapacityGate(8);
+export const teamVoteCapacity = new CapacityGate(48);
+export const teamCommentCapacity = new CapacityGate(12);
+export const teamCommentReadCapacity = new CapacityGate(16);
+export const teamTopicHistoryCapacity = new CapacityGate(8);
 const databaseCapacity = new CapacityGate(64);
 export const CRITICAL_DATABASE_RESERVE = 16;
 

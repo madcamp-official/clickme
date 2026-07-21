@@ -30,6 +30,7 @@ cloudflared.deb
 /topic3/
 /topic4/
 /topic5/
+/topic6/
 
 # Supabase local metadata
 /supabase/.temp

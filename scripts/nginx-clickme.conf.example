@@ -69,6 +69,19 @@ map $request_method $clickme_comments_post_visitor {
     default "";
 }
 
+# /api/team-comments mirrors /api/comments (10-team KBO voting widget, kept on
+# its own path/tables/zones so it cannot consume or be starved by the
+# existing binary-choice comment budget).
+map $request_method $clickme_team_comments_post_ip {
+    POST    $clickme_client_ip;
+    default "";
+}
+
+map $request_method $clickme_team_comments_post_visitor {
+    POST    $clickme_visitor_limit_key;
+    default "";
+}
+
 # Do not put referral tokens, query strings, IPs, user agents, or referrers in
 # the access log. Rate-limit rejections are sampled at 1% to bound disk growth.
 map $uri $clickme_log_route {
@@ -104,6 +117,9 @@ limit_req_zone $clickme_session_limit_key zone=clickme_events:10m rate=12r/m;
 limit_req_zone $clickme_visitor_limit_key zone=clickme_shares:10m rate=10r/m;
 limit_req_zone $clickme_comments_post_visitor zone=clickme_comments:10m rate=10r/m;
 limit_req_zone $clickme_comments_post_ip zone=clickme_comments_net:10m rate=60r/s;
+limit_req_zone $clickme_client_ip zone=clickme_team_vote_net:10m rate=20r/s;
+limit_req_zone $clickme_team_comments_post_visitor zone=clickme_team_comments:10m rate=10r/m;
+limit_req_zone $clickme_team_comments_post_ip zone=clickme_team_comments_net:10m rate=60r/s;
 limit_req_zone $clickme_client_ip zone=clickme_public_read:10m rate=300r/m;
 
 proxy_cache_path /var/cache/nginx/clickme
@@ -254,6 +270,33 @@ server {
         proxy_pass http://clickme_next;
     }
 
+    # Same guard pattern as /api/comments, on its own zones (see the
+    # clickme_team_comments* maps/zones above). GET is public and unguarded;
+    # POST is a vote-gated mutation checked the same way as every other
+    # mutation endpoint here.
+    location = /api/team-comments {
+        if ($request_method !~ ^(?:GET|HEAD|POST)$) { return 405; }
+
+        set $clickme_team_comments_origin_check "$request_method$clickme_origin_ok";
+        set $clickme_team_comments_fetch_site_check "$request_method$clickme_fetch_site_ok";
+        set $clickme_team_comments_json_check "$request_method$clickme_json_ok";
+        set $clickme_team_comments_csrf_check "$request_method$clickme_csrf_present";
+        set $clickme_team_comments_session_check "$request_method$clickme_session_present";
+
+        if ($clickme_team_comments_origin_check = "POST0") { return 403; }
+        if ($clickme_team_comments_fetch_site_check = "POST0") { return 403; }
+        if ($clickme_team_comments_json_check = "POST0") { return 415; }
+        if ($clickme_team_comments_csrf_check = "POST0") { return 403; }
+        if ($clickme_team_comments_session_check = "POST0") { return 409; }
+
+        client_max_body_size 4k;
+        limit_req zone=clickme_public_read burst=30 nodelay;
+        limit_req zone=clickme_team_comments_net burst=30 nodelay;
+        limit_req zone=clickme_team_comments burst=3 nodelay;
+
+        proxy_pass http://clickme_next;
+    }
+
     # Keep the footer Easter egg out of the application process.
     location = /api/next {
         if ($request_method != GET) { return 405; }
@@ -329,6 +372,21 @@ server {
 
         client_max_body_size 4k;
         limit_req zone=clickme_vote_net burst=30 nodelay;
+        proxy_pass http://clickme_next;
+    }
+
+    # 10-team KBO voting widget, guarded identically to /api/vote but on its
+    # own zone so it cannot be starved by (or starve) binary-choice voting.
+    location = /api/team-vote {
+        if ($request_method != POST) { return 405; }
+        if ($clickme_origin_ok = 0) { return 403; }
+        if ($clickme_fetch_site_ok = 0) { return 403; }
+        if ($clickme_json_ok = 0) { return 415; }
+        if ($clickme_csrf_present = 0) { return 403; }
+        if ($clickme_session_present = 0) { return 409; }
+
+        client_max_body_size 4k;
+        limit_req zone=clickme_team_vote_net burst=30 nodelay;
         proxy_pass http://clickme_next;
     }
 

@@ -10,6 +10,18 @@ export type Json =
 
 export type CampaignMode = "active" | "protected" | "read_only";
 
+export type TeamChoice =
+  | "kia"
+  | "samsung"
+  | "lg"
+  | "doosan"
+  | "kt"
+  | "ssg"
+  | "lotte"
+  | "hanwha"
+  | "nc"
+  | "kiwoom";
+
 export type AnalyticsEventName =
   | "section_impression"
   | "share_card_impression"
@@ -631,6 +643,156 @@ export type Database = {
         };
         Relationships: [];
       };
+      team_votes: {
+        Row: {
+          id: string;
+          campaign_id: string;
+          session_id: string | null;
+          page_view_id: string | null;
+          request_id: string;
+          visitor_hash: string;
+          network_hash: string;
+          choice: TeamChoice;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          campaign_id: string;
+          session_id?: string | null;
+          page_view_id?: string | null;
+          request_id: string;
+          visitor_hash: string;
+          network_hash: string;
+          choice: TeamChoice;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          campaign_id?: string;
+          session_id?: string | null;
+          page_view_id?: string | null;
+          request_id?: string;
+          visitor_hash?: string;
+          network_hash?: string;
+          choice?: TeamChoice;
+          created_at?: string;
+        };
+        Relationships: [];
+      };
+      team_vote_shards: {
+        Row: {
+          campaign_id: string;
+          choice: TeamChoice;
+          shard_id: number;
+          vote_count: number;
+          updated_at: string;
+        };
+        Insert: {
+          campaign_id: string;
+          choice: TeamChoice;
+          shard_id: number;
+          vote_count?: number;
+          updated_at?: string;
+        };
+        Update: {
+          campaign_id?: string;
+          choice?: TeamChoice;
+          shard_id?: number;
+          vote_count?: number;
+          updated_at?: string;
+        };
+        Relationships: [];
+      };
+      team_comments: {
+        Row: {
+          id: string;
+          campaign_id: string;
+          session_id: string | null;
+          page_view_id: string | null;
+          request_id: string;
+          visitor_hash: string;
+          network_hash: string;
+          choice: TeamChoice;
+          body: string;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          campaign_id: string;
+          session_id?: string | null;
+          page_view_id?: string | null;
+          request_id: string;
+          visitor_hash: string;
+          network_hash: string;
+          choice: TeamChoice;
+          body: string;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          campaign_id?: string;
+          session_id?: string | null;
+          page_view_id?: string | null;
+          request_id?: string;
+          visitor_hash?: string;
+          network_hash?: string;
+          choice?: TeamChoice;
+          body?: string;
+          created_at?: string;
+        };
+        Relationships: [];
+      };
+      team_topic_history: {
+        Row: {
+          id: string;
+          campaign_id: string;
+          title: string;
+          starts_at: string | null;
+          ends_at: string | null;
+          archived_at: string;
+          reason: string;
+        };
+        Insert: {
+          id?: string;
+          campaign_id: string;
+          title: string;
+          starts_at?: string | null;
+          ends_at?: string | null;
+          archived_at?: string;
+          reason: string;
+        };
+        Update: {
+          id?: string;
+          campaign_id?: string;
+          title?: string;
+          starts_at?: string | null;
+          ends_at?: string | null;
+          archived_at?: string;
+          reason?: string;
+        };
+        Relationships: [];
+      };
+      team_topic_history_results: {
+        Row: {
+          team_topic_history_id: string;
+          choice: TeamChoice;
+          label: string;
+          vote_count: number;
+        };
+        Insert: {
+          team_topic_history_id: string;
+          choice: TeamChoice;
+          label: string;
+          vote_count?: number;
+        };
+        Update: {
+          team_topic_history_id?: string;
+          choice?: TeamChoice;
+          label?: string;
+          vote_count?: number;
+        };
+        Relationships: [];
+      };
     };
     Views: {
       analytics_daily_funnel: {
@@ -741,6 +903,22 @@ export type Database = {
       };
     };
     Functions: {
+      archive_current_team_topic_and_reset: {
+        Args: {
+          p_title: string;
+          p_reason: string;
+          p_labels: Json;
+        };
+        Returns: Array<{
+          id: string;
+          campaign_id: string;
+          title: string;
+          starts_at: string | null;
+          ends_at: string | null;
+          archived_at: string;
+          reason: string;
+        }>;
+      };
       archive_current_topic_and_reset: {
         Args: {
           p_title: string;
@@ -805,6 +983,22 @@ export type Database = {
           experiment_variant: string;
         }>;
       };
+      cast_team_vote: {
+        Args: {
+          p_visitor_hash: string;
+          p_network_hash: string;
+          p_session_id: string;
+          p_page_view_id: string;
+          p_request_id: string;
+          p_choice: TeamChoice;
+        };
+        Returns: Array<{
+          vote_id: string;
+          accepted: boolean;
+          duplicate: boolean;
+          choice: TeamChoice;
+        }>;
+      };
       cast_vote: {
         Args: {
           p_visitor_hash: string;
@@ -864,6 +1058,18 @@ export type Database = {
           server_time: string;
         }>;
       };
+      get_public_team_vote_results: {
+        Args: Record<PropertyKey, never>;
+        Returns: Array<{
+          choice: TeamChoice;
+          vote_count: number;
+          campaign_id: string;
+          campaign_status: CampaignMode;
+          starts_at: string | null;
+          ends_at: string | null;
+          revision: number;
+        }>;
+      };
       get_public_vote_results: {
         Args: Record<PropertyKey, never>;
         Returns: Array<{
@@ -893,6 +1099,24 @@ export type Database = {
           choice: Choice;
           body: string;
           created_at: string;
+        }>;
+      };
+      list_public_team_comments: {
+        Args: { p_limit?: number };
+        Returns: Array<{
+          id: string;
+          choice: TeamChoice;
+          body: string;
+          created_at: string;
+        }>;
+      };
+      list_public_team_topic_history: {
+        Args: { p_limit?: number };
+        Returns: Array<{
+          id: string;
+          title: string;
+          archived_at: string;
+          results: Json;
         }>;
       };
       list_public_topic_history: {
@@ -983,9 +1207,26 @@ export type Database = {
           duplicate: boolean;
         }>;
       };
+      submit_team_comment: {
+        Args: {
+          p_visitor_hash: string;
+          p_network_hash: string;
+          p_session_id: string;
+          p_page_view_id: string;
+          p_request_id: string;
+          p_choice: TeamChoice;
+          p_body: string;
+        };
+        Returns: Array<{
+          comment_id: string;
+          accepted: boolean;
+          duplicate: boolean;
+        }>;
+      };
     };
     Enums: {
       vote_choice: Choice;
+      team_choice: TeamChoice;
       campaign_mode: CampaignMode;
       analytics_event_name: AnalyticsEventName;
       comment_attempt_outcome: CommentAttemptOutcome;

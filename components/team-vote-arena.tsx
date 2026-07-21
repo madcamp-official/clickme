@@ -1,0 +1,1115 @@
+"use client";
+
+import { useCallback, useEffect, useRef, useState } from "react";
+
+type TeamChoice =
+  | "kia"
+  | "samsung"
+  | "lg"
+  | "doosan"
+  | "kt"
+  | "ssg"
+  | "lotte"
+  | "hanwha"
+  | "nc"
+  | "kiwoom";
+
+type Team = {
+  id: TeamChoice;
+  name: string;
+  color: string;
+  glow: string;
+  logo: string;
+};
+
+type CampaignStatus = "active" | "protected" | "read_only";
+
+type CampaignState = {
+  id?: string;
+  status: CampaignStatus;
+  startsAt: string | null;
+  endsAt: string | null;
+  revision: number;
+};
+
+type TeamVoteResults = {
+  counts: Record<TeamChoice, number>;
+  total: number;
+  campaign: CampaignState;
+};
+
+type SessionContext = {
+  sessionId: string;
+  pageViewId: string;
+  expiresAt: string;
+  serverTime: string;
+  expiresInMs: number;
+  csrfToken: string;
+  heartbeatIntervalMs: number;
+  campaign: CampaignState;
+  experimentVariant: "A" | "B";
+  requestStartedAtMonotonic: number;
+  receivedAtMonotonic: number;
+  deadlineMonotonic: number;
+  serverTimeAtReceiptMs: number;
+};
+
+type QueuedVote = {
+  choice: TeamChoice;
+  requestId: string;
+  sequence: number;
+};
+
+type CommentEntry = {
+  id: string;
+  choice: TeamChoice;
+  body: string;
+  createdAt: string;
+};
+
+type TopicHistoryResult = {
+  choice: TeamChoice;
+  label: string;
+  voteCount: number;
+};
+
+type TopicHistoryEntry = {
+  id: string;
+  title: string;
+  archivedAt: string;
+  results: TopicHistoryResult[];
+};
+
+type Notice = { tone: "success" | "error"; message: string };
+
+const TEAMS: Team[] = [
+  { id: "kia", name: "KIA 타이거즈", color: "#E61E23", glow: "rgba(230,30,35,0.35)", logo: "/logos/kia.svg" },
+  { id: "samsung", name: "삼성 라이온즈", color: "#0066B3", glow: "rgba(0,102,179,0.35)", logo: "/logos/samsung.svg" },
+  { id: "lg", name: "LG 트윈스", color: "#C60C30", glow: "rgba(198,12,48,0.35)", logo: "/logos/lg.svg" },
+  { id: "doosan", name: "두산 베어스", color: "#5A7FC2", glow: "rgba(90,127,194,0.35)", logo: "/logos/doosan.svg" },
+  { id: "kt", name: "KT 위즈", color: "#D0021B", glow: "rgba(208,2,27,0.35)", logo: "/logos/kt.svg" },
+  { id: "ssg", name: "SSG 랜더스", color: "#CE0E2D", glow: "rgba(206,14,45,0.35)", logo: "/logos/ssg.svg" },
+  { id: "lotte", name: "롯데 자이언츠", color: "#0055A4", glow: "rgba(0,85,164,0.35)", logo: "/logos/lotte.svg" },
+  { id: "hanwha", name: "한화 이글스", color: "#FF6600", glow: "rgba(255,102,0,0.35)", logo: "/logos/hanwha.svg" },
+  { id: "nc", name: "NC 다이노스", color: "#315288", glow: "rgba(49,82,136,0.35)", logo: "/logos/nc.svg" },
+  { id: "kiwoom", name: "키움 히어로즈", color: "#820024", glow: "rgba(130,0,36,0.35)", logo: "/logos/kiwoom.svg" },
+];
+
+const TEAM_CHOICES: TeamChoice[] = TEAMS.map((team) => team.id);
+
+const numberFormatter = new Intl.NumberFormat("ko-KR");
+const VOTE_DISPATCH_INTERVAL_MS = 80;
+const VOTE_QUEUE_MAX_SIZE = 30;
+const RESULTS_POLL_MIN_MS = 1_000;
+const RESULTS_POLL_MAX_BACKOFF_MS = 60_000;
+
+function zeroCounts(): Record<TeamChoice, number> {
+  return Object.fromEntries(TEAM_CHOICES.map((id) => [id, 0])) as Record<TeamChoice, number>;
+}
+
+class ApiRequestError extends Error {
+  constructor(
+    readonly status: number,
+    readonly code: string | null,
+    message: string,
+  ) {
+    super(message);
+  }
+}
+
+function errorPayload(payload: unknown): { message: string | null; code: string | null } {
+  if (!payload || typeof payload !== "object") return { message: null, code: null };
+  const value = payload as { error?: unknown; message?: unknown; code?: unknown };
+  return {
+    message: typeof value.message === "string"
+      ? value.message
+      : typeof value.error === "string"
+        ? value.error
+        : null,
+    code: typeof value.code === "string" ? value.code : null,
+  };
+}
+
+async function requestJson<T>(url: string, init?: RequestInit): Promise<T> {
+  const headers = new Headers(init?.headers);
+  headers.set("Accept", "application/json");
+  if (init?.body) headers.set("Content-Type", "application/json");
+
+  const response = await fetch(url, {
+    ...init,
+    cache: init?.cache ?? (init?.method ? "no-store" : "default"),
+    headers,
+  });
+  const raw = await response.text();
+  let payload: unknown = null;
+
+  if (raw) {
+    try {
+      payload = JSON.parse(raw);
+    } catch {
+      payload = null;
+    }
+  }
+
+  if (!response.ok) {
+    const parsed = errorPayload(payload);
+    throw new ApiRequestError(
+      response.status,
+      parsed.code,
+      parsed.message ?? "요청을 처리하지 못했어요.",
+    );
+  }
+
+  return payload as T;
+}
+
+function isCampaignState(value: unknown): value is CampaignState {
+  if (!value || typeof value !== "object") return false;
+  const campaign = value as Partial<CampaignState>;
+  return (
+    ["active", "protected", "read_only"].includes(campaign.status ?? "")
+    && (typeof campaign.startsAt === "string" || campaign.startsAt === null)
+    && (typeof campaign.endsAt === "string" || campaign.endsAt === null)
+    && typeof campaign.revision === "number"
+  );
+}
+
+function isTeamVoteResults(value: unknown): value is TeamVoteResults {
+  if (!value || typeof value !== "object") return false;
+  const result = value as Partial<TeamVoteResults>;
+  return Boolean(
+    result.counts
+    && typeof result.total === "number"
+    && TEAM_CHOICES.every((id) => typeof (result.counts as Record<string, unknown>)[id] === "number")
+    && isCampaignState(result.campaign),
+  );
+}
+
+type SessionResponse = Omit<
+  SessionContext,
+  | "requestStartedAtMonotonic"
+  | "receivedAtMonotonic"
+  | "deadlineMonotonic"
+  | "serverTimeAtReceiptMs"
+>;
+
+function isSessionResponse(value: unknown): value is SessionResponse {
+  if (!value || typeof value !== "object") return false;
+  const session = value as Partial<SessionResponse>;
+  return Boolean(
+    typeof session.sessionId === "string"
+    && typeof session.pageViewId === "string"
+    && typeof session.expiresAt === "string"
+    && typeof session.serverTime === "string"
+    && Number.isFinite(new Date(session.serverTime).getTime())
+    && typeof session.expiresInMs === "number"
+    && Number.isSafeInteger(session.expiresInMs)
+    && session.expiresInMs > 0
+    && session.expiresInMs <= 90_000_000
+    && typeof session.csrfToken === "string"
+    && typeof session.heartbeatIntervalMs === "number"
+    && isCampaignState(session.campaign)
+    && (session.experimentVariant === "A" || session.experimentVariant === "B"),
+  );
+}
+
+function isCommentsResponse(value: unknown): value is { comments: CommentEntry[] } {
+  if (!value || typeof value !== "object") return false;
+  const response = value as { comments?: unknown };
+  return Array.isArray(response.comments);
+}
+
+function isTopicHistoryResponse(value: unknown): value is { topics: TopicHistoryEntry[] } {
+  if (!value || typeof value !== "object") return false;
+  const response = value as { topics?: unknown };
+  return Array.isArray(response.topics);
+}
+
+function friendlyError(error: unknown): string {
+  if (error instanceof ApiRequestError) {
+    if (error.status === 429) return "너무 빠르게 요청하고 있어요. 잠시 후 다시 시도해 주세요.";
+    if (error.status === 409) return "세션이 만료되어 다시 시작했어요. 다시 시도해 주세요.";
+    if (error.status === 410) return "지금은 참여할 수 없어요.";
+    return error.message;
+  }
+  return "네트워크 오류가 발생했어요. 잠시 후 다시 시도해 주세요.";
+}
+
+function percentage(value: number, total: number): number {
+  if (total <= 0) return 0;
+  return Math.round((value / total) * 100);
+}
+
+function createUuid(): string {
+  if (typeof crypto !== "undefined" && "randomUUID" in crypto) return crypto.randomUUID();
+  return "10000000-1000-4000-8000-100000000000".replace(/[018]/g, (c) => {
+    const n = Number(c);
+    return (n ^ (crypto.getRandomValues(new Uint8Array(1))[0] & (15 >> (n / 4)))).toString(16);
+  });
+}
+
+function safeHost(referrer: string): string | null {
+  if (!referrer) return null;
+  try {
+    return new URL(referrer).hostname.slice(0, 128);
+  } catch {
+    return null;
+  }
+}
+
+function shortQueryValue(params: URLSearchParams, key: string): string | null {
+  const value = params.get(key);
+  return value ? value.slice(0, 128) : null;
+}
+
+function isVotingOpen(status: CampaignStatus | undefined): boolean {
+  return status === "active";
+}
+
+function isCommentsOpen(status: CampaignStatus | undefined): boolean {
+  return status === "active";
+}
+
+function isSessionBeforeDeadline(session: SessionContext): boolean {
+  return performance.now() < session.deadlineMonotonic;
+}
+
+function formatArchivedDate(iso: string): string {
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return "";
+  return `${date.getFullYear()}.${String(date.getMonth() + 1).padStart(2, "0")}.${String(date.getDate()).padStart(2, "0")}`;
+}
+
+export function TeamVoteArena() {
+  const [results, setResults] = useState<TeamVoteResults | null>(null);
+  const [session, setSession] = useState<SessionContext | null>(null);
+  const [confirmedVotes, setConfirmedVotes] = useState<Record<TeamChoice, number>>(zeroCounts());
+  const [lastAcceptedChoice, setLastAcceptedChoice] = useState<TeamChoice | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<Notice | null>(null);
+  const [comments, setComments] = useState<CommentEntry[]>([]);
+  const [commentInput, setCommentInput] = useState("");
+  const [isCommentSubmitting, setIsCommentSubmitting] = useState(false);
+  const [topicHistory, setTopicHistory] = useState<TopicHistoryEntry[]>([]);
+  const [showPastTopics, setShowPastTopics] = useState(false);
+
+  const sessionRef = useRef<SessionContext | null>(null);
+  const sessionRequest = useRef<Promise<SessionContext> | null>(null);
+  const campaignRef = useRef<CampaignState | null>(null);
+  const confirmedVotesRef = useRef<Record<TeamChoice, number>>(zeroCounts());
+  const lastAcceptedChoiceRef = useRef<TeamChoice | null>(null);
+  const publicCountsRef = useRef<Record<TeamChoice, number> | null>(null);
+  const publicCampaignIdRef = useRef<string | undefined>(undefined);
+  const resultsRequest = useRef<Promise<boolean> | null>(null);
+  const voteQueue = useRef<QueuedVote[]>([]);
+  const voteSequence = useRef(0);
+  const latestAcceptedSequence = useRef(-1);
+  const pendingVoteCount = useRef(0);
+  const noticeTimer = useRef<number | undefined>(undefined);
+  const resultsPollTimer = useRef<number | undefined>(undefined);
+  const resultsPollFailures = useRef(0);
+
+  const showNotice = useCallback((next: Notice) => {
+    window.clearTimeout(noticeTimer.current);
+    setNotice(next);
+    noticeTimer.current = window.setTimeout(() => setNotice(null), 4_000);
+  }, []);
+
+  const createSession = useCallback(async (): Promise<SessionContext> => {
+    const query = new URLSearchParams(window.location.search);
+    const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    const payload = {
+      path: window.location.pathname,
+      pageViewId: createUuid(),
+      referrerHost: safeHost(document.referrer),
+      utm: {
+        source: shortQueryValue(query, "utm_source"),
+        medium: shortQueryValue(query, "utm_medium"),
+        campaign: shortQueryValue(query, "utm_campaign"),
+        content: shortQueryValue(query, "utm_content"),
+        term: shortQueryValue(query, "utm_term"),
+      },
+      client: {
+        language: navigator.language.slice(0, 32),
+        timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone.slice(0, 64),
+        viewportWidth: window.innerWidth,
+        viewportHeight: window.innerHeight,
+        screenWidth: window.screen.width,
+        screenHeight: window.screen.height,
+        touch: navigator.maxTouchPoints > 0,
+        reducedMotion,
+      },
+    };
+
+    const requestStartedAtMonotonic = performance.now();
+    const response = await requestJson<unknown>("/api/session", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+    if (!isSessionResponse(response)) throw new Error("invalid session response");
+    const receivedAtMonotonic = performance.now();
+    return {
+      ...response,
+      requestStartedAtMonotonic,
+      receivedAtMonotonic,
+      deadlineMonotonic: requestStartedAtMonotonic + response.expiresInMs,
+      serverTimeAtReceiptMs: new Date(response.serverTime).getTime(),
+    };
+  }, []);
+
+  const initializeSession = useCallback(async (force = false): Promise<SessionContext> => {
+    const current = sessionRef.current;
+    if (!force && current && isSessionBeforeDeadline(current)) return current;
+    if (sessionRequest.current) return sessionRequest.current;
+
+    const request = createSession()
+      .then((nextSession) => {
+        sessionRef.current = nextSession;
+        campaignRef.current = nextSession.campaign;
+        setSession(nextSession);
+        return nextSession;
+      })
+      .finally(() => {
+        sessionRequest.current = null;
+      });
+
+    sessionRequest.current = request;
+    return request;
+  }, [createSession]);
+
+  const refreshExpiredSession = useCallback(async (expiredSessionId: string): Promise<SessionContext> => {
+    const current = sessionRef.current;
+    if (current && current.sessionId !== expiredSessionId && isSessionBeforeDeadline(current)) {
+      return current;
+    }
+    return initializeSession(true);
+  }, [initializeSession]);
+
+  const reconcileResults = useCallback((
+    nextResults: TeamVoteResults,
+    confirmedAtRequestStart: Record<TeamChoice, number>,
+  ) => {
+    const previousCounts = publicCountsRef.current;
+    const campaignChanged = (
+      previousCounts !== null
+      && publicCampaignIdRef.current !== undefined
+      && nextResults.campaign.id !== publicCampaignIdRef.current
+    );
+
+    if (!previousCounts || campaignChanged) {
+      publicCountsRef.current = nextResults.counts;
+      publicCampaignIdRef.current = nextResults.campaign.id;
+      if (campaignChanged) {
+        confirmedVotesRef.current = zeroCounts();
+        setConfirmedVotes(zeroCounts());
+      }
+      setResults(nextResults);
+      return;
+    }
+
+    const counts = zeroCounts();
+    let total = 0;
+    for (const id of TEAM_CHOICES) {
+      counts[id] = Math.max(previousCounts[id], nextResults.counts[id]);
+      total += counts[id];
+    }
+
+    const currentConfirmed = confirmedVotesRef.current;
+    const nextConfirmed = zeroCounts();
+    for (const id of TEAM_CHOICES) {
+      const observed = Math.max(0, counts[id] - previousCounts[id]);
+      nextConfirmed[id] = Math.max(
+        0,
+        currentConfirmed[id] - Math.min(observed, confirmedAtRequestStart[id], currentConfirmed[id]),
+      );
+    }
+
+    publicCountsRef.current = counts;
+    publicCampaignIdRef.current = nextResults.campaign.id;
+    confirmedVotesRef.current = nextConfirmed;
+    setConfirmedVotes(nextConfirmed);
+    setResults({ counts, total, campaign: nextResults.campaign });
+  }, []);
+
+  const refreshResults = useCallback(async (silent = false): Promise<boolean> => {
+    if (resultsRequest.current) return resultsRequest.current;
+    if (!silent) setIsLoading(true);
+    const confirmedAtRequestStart = { ...confirmedVotesRef.current };
+
+    const request = (async () => {
+      try {
+        const nextResults = await requestJson<unknown>("/api/team-results");
+        if (!isTeamVoteResults(nextResults)) throw new Error("invalid results response");
+        campaignRef.current = nextResults.campaign;
+        reconcileResults(nextResults, confirmedAtRequestStart);
+        setLoadError(null);
+        return true;
+      } catch (error) {
+        setLoadError(friendlyError(error));
+        return false;
+      } finally {
+        setIsLoading(false);
+      }
+    })();
+
+    resultsRequest.current = request;
+    try {
+      return await request;
+    } finally {
+      resultsRequest.current = null;
+    }
+  }, [reconcileResults]);
+
+  useEffect(() => {
+    const initialLoad = window.setTimeout(() => void refreshResults(), 0);
+    return () => window.clearTimeout(initialLoad);
+  }, [refreshResults]);
+
+  useEffect(() => {
+    function clearPoll() {
+      window.clearTimeout(resultsPollTimer.current);
+      resultsPollTimer.current = undefined;
+    }
+
+    // Subtract the previous request's own round-trip time from the next
+    // delay so request *start* times stay ~1s apart, instead of 1s plus
+    // however long the fetch took (which otherwise compounds every cycle).
+    function schedulePoll(previousRequestStartedAt?: number) {
+      clearPoll();
+      if (document.visibilityState !== "visible") return;
+      const failures = resultsPollFailures.current;
+      const delay = failures === 0
+        ? Math.max(0, RESULTS_POLL_MIN_MS - (previousRequestStartedAt !== undefined ? performance.now() - previousRequestStartedAt : 0))
+        : Math.min(RESULTS_POLL_MAX_BACKOFF_MS, RESULTS_POLL_MIN_MS * (2 ** failures));
+
+      resultsPollTimer.current = window.setTimeout(async () => {
+        if (document.visibilityState !== "visible") return;
+        const requestStartedAt = performance.now();
+        const succeeded = await refreshResults(true);
+        resultsPollFailures.current = succeeded ? 0 : Math.min(resultsPollFailures.current + 1, 4);
+        schedulePoll(requestStartedAt);
+      }, delay);
+    }
+
+    function handleVisibilityChange() {
+      if (document.visibilityState === "visible") {
+        const requestStartedAt = performance.now();
+        void refreshResults(true).then((succeeded) => {
+          resultsPollFailures.current = succeeded ? 0 : Math.min(resultsPollFailures.current + 1, 4);
+          schedulePoll(requestStartedAt);
+        });
+      } else {
+        clearPoll();
+      }
+    }
+
+    if (!isLoading) schedulePoll();
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    return () => {
+      clearPoll();
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
+  }, [isLoading, refreshResults]);
+
+  const refreshComments = useCallback(async () => {
+    try {
+      const response = await requestJson<unknown>("/api/team-comments");
+      if (isCommentsResponse(response)) setComments(response.comments);
+    } catch {
+      // Comments are non-critical; a failed refresh just keeps the last list.
+    }
+  }, []);
+
+  useEffect(() => {
+    const initialLoad = window.setTimeout(() => void refreshComments(), 0);
+    const interval = window.setInterval(() => {
+      if (document.visibilityState === "visible") void refreshComments();
+    }, 8_000);
+    return () => {
+      window.clearTimeout(initialLoad);
+      window.clearInterval(interval);
+    };
+  }, [refreshComments]);
+
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      try {
+        const response = await requestJson<unknown>("/api/team-topics/history");
+        if (!cancelled && isTopicHistoryResponse(response)) setTopicHistory(response.topics);
+      } catch {
+        // Past topics are non-critical; leave the section empty on failure.
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  async function submitComment() {
+    const text = commentInput.trim();
+    if (!text || !lastAcceptedChoice || isCommentSubmitting) return;
+    setIsCommentSubmitting(true);
+    try {
+      const activeSession = await initializeSession();
+      await requestJson<unknown>("/api/team-comments", {
+        method: "POST",
+        headers: { "X-Clickme-CSRF": activeSession.csrfToken },
+        body: JSON.stringify({
+          choice: lastAcceptedChoice,
+          requestId: createUuid(),
+          sessionId: activeSession.sessionId,
+          pageViewId: activeSession.pageViewId,
+          body: text,
+        }),
+      });
+      setCommentInput("");
+      void refreshComments();
+    } catch (error) {
+      showNotice({ tone: "error", message: friendlyError(error) });
+    } finally {
+      setIsCommentSubmitting(false);
+    }
+  }
+
+  const submitVote = useCallback(async (item: QueuedVote) => {
+    let activeSession: SessionContext | null = null;
+
+    try {
+      activeSession = await initializeSession();
+      for (let attempt = 0; attempt < 2; attempt += 1) {
+        try {
+          const response = await requestJson<unknown>("/api/team-vote", {
+            method: "POST",
+            headers: { "X-Clickme-CSRF": activeSession.csrfToken },
+            body: JSON.stringify({
+              choice: item.choice,
+              requestId: item.requestId,
+              sessionId: activeSession.sessionId,
+              pageViewId: activeSession.pageViewId,
+            }),
+          });
+          const voteResponse = response as { accepted?: unknown; choice?: unknown };
+          if (voteResponse.accepted !== true || voteResponse.choice !== item.choice) {
+            throw new Error("invalid vote response");
+          }
+          if (item.sequence > latestAcceptedSequence.current) {
+            latestAcceptedSequence.current = item.sequence;
+            lastAcceptedChoiceRef.current = item.choice;
+            setLastAcceptedChoice(item.choice);
+          }
+          const currentConfirmed = confirmedVotesRef.current;
+          const nextConfirmed = { ...currentConfirmed, [item.choice]: currentConfirmed[item.choice] + 1 };
+          confirmedVotesRef.current = nextConfirmed;
+          setConfirmedVotes(nextConfirmed);
+          break;
+        } catch (error) {
+          if (
+            attempt === 0
+            && error instanceof ApiRequestError
+            && error.status === 409
+            && error.code === "SESSION_EXPIRED"
+          ) {
+            activeSession = await refreshExpiredSession(activeSession.sessionId);
+            continue;
+          }
+          throw error;
+        }
+      }
+    } catch (error) {
+      showNotice({ tone: "error", message: friendlyError(error) });
+      if (error instanceof ApiRequestError && error.status === 410) void refreshResults(true);
+    } finally {
+      pendingVoteCount.current = Math.max(0, pendingVoteCount.current - 1);
+      if (pendingVoteCount.current === 0) void refreshResults(true);
+    }
+  }, [initializeSession, refreshExpiredSession, refreshResults, showNotice]);
+
+  useEffect(() => {
+    const dispatch = window.setInterval(() => {
+      if (!sessionRef.current || sessionRequest.current) return;
+      const item = voteQueue.current.shift();
+      if (!item) return;
+      void submitVote(item);
+    }, VOTE_DISPATCH_INTERVAL_MS);
+    return () => window.clearInterval(dispatch);
+  }, [submitVote]);
+
+  const handleVote = useCallback((choice: TeamChoice) => {
+    if (!isVotingOpen((campaignRef.current ?? session?.campaign)?.status)) {
+      showNotice({ tone: "error", message: "지금은 투표할 수 없어요." });
+      return;
+    }
+    if (voteQueue.current.length >= VOTE_QUEUE_MAX_SIZE) return;
+    voteSequence.current += 1;
+    pendingVoteCount.current += 1;
+    voteQueue.current.push({ choice, requestId: createUuid(), sequence: voteSequence.current });
+  }, [session, showNotice]);
+
+  // Server counts already fold in confirmed votes absorbed by earlier polls
+  // (see reconcileResults); adding the remaining un-absorbed confirmedVotes
+  // gives instant feedback the moment a vote is accepted, without waiting
+  // for the next ~1s poll to reflect it.
+  const displayCounts = zeroCounts();
+  let totalVotes = 0;
+  for (const id of TEAM_CHOICES) {
+    displayCounts[id] = (results?.counts[id] ?? 0) + confirmedVotes[id];
+    totalVotes += displayCounts[id];
+  }
+  const hasVoted = lastAcceptedChoice !== null;
+  const maxVotes = totalVotes > 0 ? Math.max(...TEAM_CHOICES.map((id) => displayCounts[id])) : 0;
+  const topTeams = totalVotes > 0 ? TEAMS.filter((team) => displayCounts[team.id] === maxVotes && maxVotes > 0) : [];
+  const topLabel = `현재 1위${topTeams.length > 1 ? ` (${topTeams.length}팀 동률)` : ""}`;
+  const rankedTeams = [...TEAMS].sort((a, b) => displayCounts[b.id] - displayCounts[a.id]);
+  const campaignStatus = (results?.campaign ?? session?.campaign)?.status;
+
+  return (
+    <div style={{ minHeight: "100vh", background: "#09090f", color: "#f5f5fa", fontFamily: "'Noto Sans KR',sans-serif" }}>
+      <main style={{ maxWidth: 900, margin: "0 auto", padding: "0 16px 80px" }}>
+        <div style={{ paddingTop: 40, paddingBottom: 24, textAlign: "center" }} data-analytics-section="header">
+          <p
+            style={{
+              fontSize: 12,
+              letterSpacing: "0.2em",
+              textTransform: "uppercase",
+              margin: "0 0 12px",
+              fontWeight: 700,
+              color: "#f5f5fa",
+            }}
+          >
+            ⚡ 오늘의 밸런스게임 ⚡
+          </p>
+          <h1
+            style={{
+              fontFamily: "'Barlow Condensed',sans-serif",
+              fontSize: 44,
+              fontWeight: 900,
+              lineHeight: 1.1,
+              letterSpacing: "-0.01em",
+              margin: "0 0 8px",
+            }}
+          >
+            가장 좋아하는
+            <br />
+            <span style={{ color: "#ffffff" }}>KBO 야구팀</span>은?
+          </h1>
+          <p style={{ fontSize: 14, color: "#8a8aa0", margin: "12px 0 0" }}>
+            좋아하는 팀을 클릭하세요! 클릭할수록 더 많이 투표돼요 🔥
+          </p>
+        </div>
+
+        {loadError && !results && (
+          <p style={{ textAlign: "center", color: "#8a8aa0", fontSize: 13, marginBottom: 16 }}>{loadError}</p>
+        )}
+
+        {hasVoted && totalVotes > 0 && (
+          <div
+            style={{
+              marginBottom: 24,
+              borderRadius: 12,
+              border: "1px solid rgba(255,255,255,0.08)",
+              background: "#12121e",
+              padding: "12px 16px",
+              display: "flex",
+              alignItems: "center",
+              gap: 12,
+            }}
+          >
+            <span style={{ fontSize: 16, flexShrink: 0 }}>🏆</span>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <p style={{ fontSize: 12, color: "#8a8aa0", margin: "0 0 2px" }}>{topLabel}</p>
+              <p style={{ fontSize: 14, fontWeight: 700, margin: 0 }}>
+                {topTeams.map((team, i) => (
+                  <span key={team.id}>
+                    {i > 0 && <span style={{ color: "#8a8aa0" }}> · </span>}
+                    <span style={{ color: team.color }}>
+                      {team.name} {percentage(displayCounts[team.id], totalVotes)}%
+                    </span>
+                  </span>
+                ))}
+              </p>
+            </div>
+            <div style={{ textAlign: "right", flexShrink: 0 }}>
+              <p style={{ fontSize: 12, color: "#8a8aa0", margin: "0 0 2px" }}>총 투표수</p>
+              <p style={{ fontSize: 14, fontWeight: 700, margin: 0 }}>{numberFormatter.format(totalVotes)}</p>
+            </div>
+          </div>
+        )}
+
+        <div
+          style={{ display: "grid", gridTemplateColumns: "repeat(5,1fr)", gap: 12, marginBottom: 32 }}
+          data-analytics-section="team-grid"
+        >
+          {TEAMS.map((team) => {
+            const pct = percentage(displayCounts[team.id], totalVotes);
+            const isLastVoted = lastAcceptedChoice === team.id;
+            const isLeading = hasVoted && topTeams.some((t) => t.id === team.id);
+            const [nameLine1, nameLine2 = ""] = team.name.split(" ");
+
+            return (
+              <button
+                key={team.id}
+                type="button"
+                onClick={() => handleVote(team.id)}
+                style={{
+                  position: "relative",
+                  display: "flex",
+                  flexDirection: "column",
+                  alignItems: "center",
+                  justifyContent: "flex-end",
+                  borderRadius: 16,
+                  border: `1px solid ${isLastVoted ? `${team.color}80` : "rgba(255,255,255,0.07)"}`,
+                  transition: "all 0.2s",
+                  cursor: "pointer",
+                  overflow: "hidden",
+                  aspectRatio: "3/4",
+                  background: isLastVoted
+                    ? `linear-gradient(160deg, ${team.color}28 0%, #0d0d1a 60%)`
+                    : "#12121e",
+                  boxShadow: isLastVoted ? `0 0 24px ${team.glow}` : "none",
+                  padding: 0,
+                  boxSizing: "border-box",
+                  width: "100%",
+                }}
+              >
+                <div
+                  style={{
+                    position: "absolute",
+                    top: 0,
+                    left: 0,
+                    right: 0,
+                    bottom: 56,
+                    padding: 14,
+                    boxSizing: "border-box",
+                    opacity: isLastVoted ? 0.75 : 0.35,
+                    transition: "opacity 0.3s",
+                  }}
+                >
+                  {/* eslint-disable-next-line @next/next/no-img-element -- static team crest SVG, next/image blocks SVG optimization by default */}
+                  <img
+                    src={team.logo}
+                    alt={team.name}
+                    style={{ width: "100%", height: "100%", objectFit: "contain", objectPosition: "50% 50%" }}
+                  />
+                </div>
+                <div
+                  style={{
+                    position: "absolute",
+                    bottom: 0,
+                    left: 0,
+                    right: 0,
+                    height: hasVoted ? `${pct}%` : "0%",
+                    background:
+                      hasVoted && pct > 0 ? `linear-gradient(to top, ${team.color}30, transparent)` : "transparent",
+                    transition: "all 0.5s ease-out",
+                  }}
+                />
+                {isLeading && (
+                  <span style={{ position: "absolute", top: 8, right: 8, fontSize: 14 }}>🏆</span>
+                )}
+                <div
+                  style={{
+                    position: "relative",
+                    zIndex: 1,
+                    width: "100%",
+                    boxSizing: "border-box",
+                    padding: "32px 8px 12px",
+                    display: "flex",
+                    flexDirection: "column",
+                    alignItems: "center",
+                    gap: 2,
+                    background: "linear-gradient(to top, #09090fcc 70%, transparent)",
+                  }}
+                >
+                  <span style={{ fontSize: 12, textAlign: "center", lineHeight: 1.2, fontWeight: 700, color: "rgba(255,255,255,0.9)" }}>
+                    {nameLine1}
+                    <br />
+                    {nameLine2}
+                  </span>
+                  <span
+                    style={{
+                      fontFamily: "'Barlow Condensed',sans-serif",
+                      fontSize: 16,
+                      fontWeight: 900,
+                      lineHeight: 1,
+                      color: pct > 0 ? team.color : "#3a3a55",
+                    }}
+                  >
+                    {hasVoted ? `${pct}%` : "클릭!"}
+                  </span>
+                </div>
+              </button>
+            );
+          })}
+        </div>
+
+        {hasVoted && totalVotes > 0 && (
+          <div
+            style={{
+              borderRadius: 16,
+              border: "1px solid rgba(255,255,255,0.08)",
+              background: "#12121e",
+              padding: 20,
+              marginBottom: 32,
+              display: "flex",
+              flexDirection: "column",
+              gap: 10,
+            }}
+          >
+            <h2
+              style={{
+                fontFamily: "'Barlow Condensed',sans-serif",
+                fontSize: 12,
+                fontWeight: 700,
+                letterSpacing: "0.2em",
+                textTransform: "uppercase",
+                color: "#8a8aa0",
+                margin: "0 0 6px",
+              }}
+            >
+              전체 순위
+            </h2>
+            {rankedTeams.map((team, i) => {
+              const pct = percentage(displayCounts[team.id], totalVotes);
+              const isTop = topTeams.some((t) => t.id === team.id);
+              const [nameLine1] = team.name.split(" ");
+              return (
+                <div key={team.id} style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                  <span
+                    style={{
+                      fontFamily: "'Barlow Condensed',sans-serif",
+                      fontSize: 12,
+                      fontWeight: 700,
+                      width: 16,
+                      textAlign: "right",
+                      flexShrink: 0,
+                      color: isTop ? "#fbbf24" : "#3a3a55",
+                    }}
+                  >
+                    {i + 1}
+                  </span>
+                  <span
+                    style={{
+                      fontSize: 12,
+                      color: "rgba(245,245,250,0.8)",
+                      width: 80,
+                      flexShrink: 0,
+                      overflow: "hidden",
+                      textOverflow: "ellipsis",
+                      whiteSpace: "nowrap",
+                    }}
+                  >
+                    {nameLine1}
+                  </span>
+                  <div style={{ flex: 1, height: 8, borderRadius: 4, background: "#1c1c2c", overflow: "hidden" }}>
+                    <div
+                      style={{
+                        height: "100%",
+                        borderRadius: 4,
+                        transition: "all 0.7s ease-out",
+                        width: `${pct}%`,
+                        background: team.color,
+                      }}
+                    />
+                  </div>
+                  <span
+                    style={{
+                      fontFamily: "'Barlow Condensed',sans-serif",
+                      fontSize: 12,
+                      fontWeight: 700,
+                      width: 32,
+                      textAlign: "right",
+                      flexShrink: 0,
+                      color: pct > 0 ? team.color : "#3a3a55",
+                    }}
+                  >
+                    {pct}%
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+        )}
+
+        <section
+          style={{ borderRadius: 16, border: "1px solid rgba(255,255,255,0.08)", background: "#12121e", padding: 20, marginBottom: 24 }}
+          data-analytics-section="comments"
+        >
+          <h2
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 8,
+              fontFamily: "'Barlow Condensed',sans-serif",
+              fontSize: 14,
+              fontWeight: 700,
+              letterSpacing: "0.05em",
+              margin: "0 0 16px",
+            }}
+          >
+            💬 익명 댓글 <span style={{ color: "#8a8aa0", fontWeight: 400 }}>{comments.length}</span>
+          </h2>
+          <div style={{ display: "flex", gap: 8, marginBottom: 20 }}>
+            <input
+              type="text"
+              value={commentInput}
+              onChange={(event) => setCommentInput(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === "Enter") void submitComment();
+              }}
+              placeholder={hasVoted ? "응원 메시지를 남겨보세요!" : "투표하면 댓글을 남길 수 있어요"}
+              maxLength={100}
+              disabled={!hasVoted || !isCommentsOpen(campaignStatus)}
+              style={{
+                flex: 1,
+                borderRadius: 12,
+                border: "1px solid rgba(255,255,255,0.08)",
+                background: "#1a1a28",
+                padding: "10px 12px",
+                fontSize: 14,
+                color: "#f5f5fa",
+                outline: "none",
+                opacity: hasVoted ? 1 : 0.5,
+              }}
+            />
+            <button
+              type="button"
+              onClick={() => void submitComment()}
+              disabled={!hasVoted || !commentInput.trim() || isCommentSubmitting}
+              style={{
+                padding: "10px 16px",
+                borderRadius: 12,
+                background: "#e94560",
+                border: "none",
+                color: "#ffffff",
+                fontSize: 14,
+                fontWeight: 700,
+                opacity: hasVoted && commentInput.trim() ? 1 : 0.3,
+                display: "flex",
+                alignItems: "center",
+                gap: 6,
+                cursor: hasVoted && commentInput.trim() ? "pointer" : "default",
+              }}
+            >
+              ➤ 등록
+            </button>
+          </div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+            {comments.length === 0 && (
+              <p style={{ fontSize: 13, color: "#8a8aa0", margin: 0 }}>아직 댓글이 없어요. 첫 댓글을 남겨보세요!</p>
+            )}
+            {comments.map((comment) => (
+              <div key={comment.id} style={{ display: "flex", alignItems: "flex-start", gap: 12 }}>
+                <div
+                  style={{
+                    width: 28,
+                    height: 28,
+                    borderRadius: "50%",
+                    background: "#1c1c2c",
+                    flexShrink: 0,
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    fontSize: 12,
+                    color: "#8a8aa0",
+                  }}
+                >
+                  ⚾
+                </div>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <p style={{ fontSize: 14, color: "rgba(245,245,250,0.9)", lineHeight: 1.5, margin: 0 }}>{comment.body}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </section>
+
+        <section
+          style={{ borderRadius: 16, border: "1px solid rgba(255,255,255,0.08)", background: "#12121e", overflow: "hidden", marginBottom: 24 }}
+          data-analytics-section="past-topics"
+        >
+          <button
+            type="button"
+            onClick={() => setShowPastTopics((v) => !v)}
+            style={{
+              width: "100%",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              padding: "16px 20px",
+              fontSize: 14,
+              fontWeight: 700,
+              color: "rgba(245,245,250,0.7)",
+              background: "none",
+              border: "none",
+              cursor: "pointer",
+            }}
+          >
+            <span style={{ fontFamily: "'Barlow Condensed',sans-serif", letterSpacing: "0.05em" }}>이전 주제 보기</span>
+            <span>{showPastTopics ? "▲" : "▼"}</span>
+          </button>
+          {showPastTopics && (
+            <div style={{ borderTop: "1px solid rgba(255,255,255,0.08)" }}>
+              {topicHistory.length === 0 && (
+                <p style={{ padding: "12px 20px", fontSize: 13, color: "#8a8aa0", margin: 0 }}>아직 이전 주제가 없어요.</p>
+              )}
+              {topicHistory.map((topic) => {
+                const topicTotal = topic.results.reduce((sum, r) => sum + r.voteCount, 0);
+                const ranked = [...topic.results].sort((a, b) => b.voteCount - a.voteCount);
+                return (
+                  <div key={topic.id} style={{ padding: "12px 20px", borderBottom: "1px solid rgba(255,255,255,0.08)" }}>
+                    <p style={{ fontSize: 12, color: "#8a8aa0", margin: "0 0 4px" }}>{formatArchivedDate(topic.archivedAt)}</p>
+                    <p style={{ fontSize: 14, color: "rgba(245,245,250,0.8)", margin: "0 0 6px" }}>{topic.title}</p>
+                    <p style={{ fontSize: 12, fontWeight: 700, color: "#a0a0c0", margin: 0 }}>
+                      {ranked.map((r) => `${r.label} ${percentage(r.voteCount, topicTotal)}%`).join(" · ")}
+                    </p>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </section>
+      </main>
+
+      {notice && (
+        <div
+          role="status"
+          style={{
+            position: "fixed",
+            bottom: 24,
+            left: "50%",
+            transform: "translateX(-50%)",
+            background: notice.tone === "success" ? "#1a3a2a" : "#3a1a22",
+            color: "#f5f5fa",
+            borderRadius: 12,
+            padding: "10px 18px",
+            fontSize: 13,
+            boxShadow: "0 8px 24px rgba(0,0,0,0.4)",
+            zIndex: 50,
+          }}
+        >
+          {notice.message}
+        </div>
+      )}
+
+      <footer style={{ borderTop: "1px solid rgba(255,255,255,0.08)", padding: "24px 0", textAlign: "center" }}>
+        <p
+          style={{
+            fontSize: 12,
+            letterSpacing: "0.2em",
+            textTransform: "uppercase",
+            fontWeight: 700,
+            margin: 0,
+            color: "#f5f5fa",
+          }}
+        >
+          ⚡ 오늘의 밸런스게임 · 투표는 계속됩니다 ⚡
+        </p>
+        <p style={{ fontSize: 12, color: "#8a8aa0", margin: "4px 0 0" }}>개인정보 처리 안내</p>
+      </footer>
+    </div>
+  );
+}
+
+export default TeamVoteArena;

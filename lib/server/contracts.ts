@@ -61,3 +61,52 @@ export type TopicHistoryResponse = {
 export function isChoice(value: unknown): value is Choice {
   return typeof value === "string" && CHOICES.includes(value as Choice);
 }
+
+// N-way (KBO team) voting. Deliberately a separate choice space from
+// Choice/CHOICES above -- see supabase/migrations/20260721000000_add_team_voting.sql
+// for why this isn't just CHOICES extended to 10 values.
+export const TEAM_CHOICES = [
+  "kia", "samsung", "lg", "doosan", "kt", "ssg", "lotte", "hanwha", "nc", "kiwoom",
+] as const;
+
+export type TeamChoice = (typeof TEAM_CHOICES)[number];
+
+export function isTeamChoice(value: unknown): value is TeamChoice {
+  return typeof value === "string" && TEAM_CHOICES.includes(value as TeamChoice);
+}
+
+export type TeamVoteCounts = Record<TeamChoice, number>;
+
+export type TeamVoteResults = {
+  counts: TeamVoteCounts;
+  total: number;
+  campaign: CampaignState;
+};
+
+export type TeamCommentEntry = {
+  id: string;
+  choice: TeamChoice;
+  body: string;
+  createdAt: string;
+};
+
+export type TeamCommentsResponse = {
+  comments: TeamCommentEntry[];
+};
+
+export type TeamTopicHistoryResult = {
+  choice: TeamChoice;
+  label: string;
+  voteCount: number;
+};
+
+export type TeamTopicHistoryEntry = {
+  id: string;
+  title: string;
+  archivedAt: string;
+  results: TeamTopicHistoryResult[];
+};
+
+export type TeamTopicHistoryResponse = {
+  topics: TeamTopicHistoryEntry[];
+};
