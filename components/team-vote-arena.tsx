@@ -975,7 +975,7 @@ export function TeamVoteArena() {
                       fontSize: 16,
                       fontWeight: 900,
                       lineHeight: 1,
-                      color: pct > 0 ? team.color : "#3a3a55",
+                      color: team.color,
                     }}
                   >
                     클릭!
