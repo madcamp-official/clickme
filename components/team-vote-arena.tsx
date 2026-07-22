@@ -1098,10 +1098,22 @@ export function TeamVoteArena() {
                 const topicTotal = topic.results.reduce((sum, r) => sum + r.voteCount, 0);
                 const ranked = [...topic.results].sort((a, b) => b.voteCount - a.voteCount);
                 return (
-                  <div key={topic.id} style={{ padding: "12px 20px", borderBottom: "1px solid rgba(255,255,255,0.08)" }}>
-                    <p style={{ fontSize: 12, color: "#8a8aa0", margin: "0 0 4px" }}>{formatArchivedDate(topic.archivedAt)}</p>
-                    <p style={{ fontSize: 14, color: "rgba(245,245,250,0.8)", margin: "0 0 6px" }}>{topic.title}</p>
-                    <p style={{ fontSize: 12, fontWeight: 700, color: "#a0a0c0", margin: 0 }}>
+                  <div
+                    key={topic.id}
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "space-between",
+                      gap: 16,
+                      padding: "12px 20px",
+                      borderBottom: "1px solid rgba(255,255,255,0.08)",
+                    }}
+                  >
+                    <div style={{ minWidth: 0 }}>
+                      <p style={{ fontSize: 12, color: "#8a8aa0", margin: "0 0 4px" }}>{formatArchivedDate(topic.archivedAt)}</p>
+                      <p style={{ fontSize: 14, color: "rgba(245,245,250,0.8)", margin: 0 }}>{topic.title}</p>
+                    </div>
+                    <p style={{ fontSize: 12, fontWeight: 700, color: "#a0a0c0", margin: 0, textAlign: "right", flexShrink: 0 }}>
                       {ranked.map((r) => `${r.label} ${percentage(r.voteCount, topicTotal)}%`).join(" · ")}
                     </p>
                   </div>
