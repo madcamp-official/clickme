@@ -1,6 +1,9 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import type { CSSProperties, MouseEvent } from "react";
+
+import { motion } from "motion/react";
 
 type TeamChoice =
   | "kia"
@@ -20,6 +23,7 @@ type Team = {
   color: string;
   glow: string;
   logo: string;
+  burstTokens: string[];
 };
 
 type CampaignStatus = "active" | "protected" | "read_only";
@@ -97,17 +101,28 @@ type BinaryTopicHistoryEntry = {
 
 type Notice = { tone: "success" | "error"; message: string };
 
+type Burst = {
+  id: number;
+  emoji: string;
+  choice: TeamChoice;
+  left: number;
+  top: number;
+  drift: number;
+  rotate: number;
+  delay: number;
+};
+
 const TEAMS: Team[] = [
-  { id: "kia", name: "KIA 타이거즈", color: "#E61E23", glow: "rgba(230,30,35,0.35)", logo: "/logos/kia.svg" },
-  { id: "samsung", name: "삼성 라이온즈", color: "#0066B3", glow: "rgba(0,102,179,0.35)", logo: "/logos/samsung.svg" },
-  { id: "lg", name: "LG 트윈스", color: "#C60C30", glow: "rgba(198,12,48,0.35)", logo: "/logos/lg.svg" },
-  { id: "doosan", name: "두산 베어스", color: "#5A7FC2", glow: "rgba(90,127,194,0.35)", logo: "/logos/doosan.svg" },
-  { id: "kt", name: "KT 위즈", color: "#D0021B", glow: "rgba(208,2,27,0.35)", logo: "/logos/kt.svg" },
-  { id: "ssg", name: "SSG 랜더스", color: "#CE0E2D", glow: "rgba(206,14,45,0.35)", logo: "/logos/ssg.svg" },
-  { id: "lotte", name: "롯데 자이언츠", color: "#0055A4", glow: "rgba(0,85,164,0.35)", logo: "/logos/lotte.svg" },
-  { id: "hanwha", name: "한화 이글스", color: "#FF6600", glow: "rgba(255,102,0,0.35)", logo: "/logos/hanwha.svg" },
-  { id: "nc", name: "NC 다이노스", color: "#315288", glow: "rgba(49,82,136,0.35)", logo: "/logos/nc.svg" },
-  { id: "kiwoom", name: "키움 히어로즈", color: "#820024", glow: "rgba(130,0,36,0.35)", logo: "/logos/kiwoom.svg" },
+  { id: "kia", name: "KIA 타이거즈", color: "#E61E23", glow: "rgba(230,30,35,0.35)", logo: "/logos/kia.svg", burstTokens: ["KIA", "🐯", "화이팅!", "타이거즈", "우승!"] },
+  { id: "samsung", name: "삼성 라이온즈", color: "#0066B3", glow: "rgba(0,102,179,0.35)", logo: "/logos/samsung.svg", burstTokens: ["삼성", "🦁", "화이팅!", "라이온즈", "우승!"] },
+  { id: "lg", name: "LG 트윈스", color: "#C60C30", glow: "rgba(198,12,48,0.35)", logo: "/logos/lg.svg", burstTokens: ["LG", "💫", "화이팅!", "트윈스", "우승!"] },
+  { id: "doosan", name: "두산 베어스", color: "#5A7FC2", glow: "rgba(90,127,194,0.35)", logo: "/logos/doosan.svg", burstTokens: ["두산", "🐻", "화이팅!", "베어스", "우승!"] },
+  { id: "kt", name: "KT 위즈", color: "#D0021B", glow: "rgba(208,2,27,0.35)", logo: "/logos/kt.svg", burstTokens: ["KT", "⚡", "화이팅!", "위즈", "우승!"] },
+  { id: "ssg", name: "SSG 랜더스", color: "#CE0E2D", glow: "rgba(206,14,45,0.35)", logo: "/logos/ssg.svg", burstTokens: ["SSG", "🦅", "화이팅!", "랜더스", "우승!"] },
+  { id: "lotte", name: "롯데 자이언츠", color: "#0055A4", glow: "rgba(0,85,164,0.35)", logo: "/logos/lotte.svg", burstTokens: ["롯데", "🔱", "화이팅!", "자이언츠", "우승!"] },
+  { id: "hanwha", name: "한화 이글스", color: "#FF6600", glow: "rgba(255,102,0,0.35)", logo: "/logos/hanwha.svg", burstTokens: ["한화", "🦅", "화이팅!", "이글스", "우승!"] },
+  { id: "nc", name: "NC 다이노스", color: "#315288", glow: "rgba(49,82,136,0.35)", logo: "/logos/nc.svg", burstTokens: ["NC", "🦖", "화이팅!", "다이노스", "우승!"] },
+  { id: "kiwoom", name: "키움 히어로즈", color: "#820024", glow: "rgba(130,0,36,0.35)", logo: "/logos/kiwoom.svg", burstTokens: ["키움", "🦸", "화이팅!", "히어로즈", "우승!"] },
 ];
 
 const TEAM_CHOICES: TeamChoice[] = TEAMS.map((team) => team.id);
@@ -305,6 +320,7 @@ export function TeamVoteArena() {
   const [session, setSession] = useState<SessionContext | null>(null);
   const [confirmedVotes, setConfirmedVotes] = useState<Record<TeamChoice, number>>(zeroCounts());
   const [lastAcceptedChoice, setLastAcceptedChoice] = useState<TeamChoice | null>(null);
+  const [lastClicked, setLastClicked] = useState<TeamChoice | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [notice, setNotice] = useState<Notice | null>(null);
@@ -313,6 +329,7 @@ export function TeamVoteArena() {
   const [isCommentSubmitting, setIsCommentSubmitting] = useState(false);
   const [topicHistory, setTopicHistory] = useState<TopicHistoryEntry[]>([]);
   const [showPastTopics, setShowPastTopics] = useState(false);
+  const [bursts, setBursts] = useState<Burst[]>([]);
 
   const sessionRef = useRef<SessionContext | null>(null);
   const sessionRequest = useRef<Promise<SessionContext> | null>(null);
@@ -330,6 +347,8 @@ export function TeamVoteArena() {
   const resultsPollTimer = useRef<number | undefined>(undefined);
   const resultsPollFailures = useRef(0);
   const footerClickTimes = useRef<number[]>([]);
+  const burstId = useRef(0);
+  const burstTimers = useRef<number[]>([]);
 
   const showNotice = useCallback((next: Notice) => {
     window.clearTimeout(noticeTimer.current);
@@ -693,17 +712,50 @@ export function TeamVoteArena() {
     return () => window.clearInterval(dispatch);
   }, [submitVote]);
 
-  const handleVote = useCallback((choice: TeamChoice) => {
+  useEffect(() => () => {
+    burstTimers.current.forEach((timer) => window.clearTimeout(timer));
+  }, []);
+
+  function createBurst(choice: TeamChoice, target: HTMLButtonElement, event: MouseEvent<HTMLButtonElement>) {
+    const rect = target.getBoundingClientRect();
+    const left = event.clientX > 0 ? ((event.clientX - rect.left) / rect.width) * 100 : 50;
+    const top = event.clientY > 0 ? ((event.clientY - rect.top) / rect.height) * 100 : 50;
+    const tokens = TEAMS.find((team) => team.id === choice)?.burstTokens ?? [];
+    const batchId = burstId.current;
+    burstId.current += tokens.length;
+
+    const nextBursts = tokens.map((emoji, index) => ({
+      id: batchId + index,
+      emoji,
+      choice,
+      left,
+      top,
+      drift: -86 + Math.random() * 172,
+      rotate: -130 + Math.random() * 260,
+      delay: Math.random() * 80,
+    }));
+
+    setBursts((current) => [...current.slice(-48), ...nextBursts]);
+    const ids = new Set(nextBursts.map((burst) => burst.id));
+    const timer = window.setTimeout(() => {
+      setBursts((current) => current.filter((burst) => !ids.has(burst.id)));
+    }, 1_150);
+    burstTimers.current.push(timer);
+  }
+
+  function handleVote(choice: TeamChoice, event: MouseEvent<HTMLButtonElement>) {
     // Campaign status isn't known client-side until the first /api/team-results
     // response lands, so this doesn't pre-block on isVotingOpen (that would
     // reject every click during the brief initial-load window). The server is
     // the actual enforcement point: cast_team_vote rejects with
     // campaign_not_active/campaign_ended, handled below via the 410 branch.
     if (voteQueue.current.length >= VOTE_QUEUE_MAX_SIZE) return;
+    setLastClicked(choice);
+    createBurst(choice, event.currentTarget, event);
     voteSequence.current += 1;
     pendingVoteCount.current += 1;
     voteQueue.current.push({ choice, requestId: createUuid(), sequence: voteSequence.current });
-  }, []);
+  }
 
   // Server counts already fold in confirmed votes absorbed by earlier polls
   // (see reconcileResults); adding the remaining un-absorbed confirmedVotes
@@ -776,33 +828,48 @@ export function TeamVoteArena() {
         )}
 
         {totalVotes > 0 && (
-          <div
-            style={{
-              marginBottom: 24,
-              borderRadius: 12,
-              border: "1px solid rgba(255,255,255,0.08)",
-              background: "#12121e",
-              padding: "12px 16px",
-              display: "flex",
-              alignItems: "center",
-              gap: 12,
-            }}
-          >
-            <span style={{ fontSize: 16, flexShrink: 0 }}>🏆</span>
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <p style={{ fontSize: 12, color: "#8a8aa0", margin: "0 0 2px" }}>{topLabel}</p>
-              <p style={{ fontSize: 14, fontWeight: 700, margin: 0 }}>
-                {topTeams.map((team, i) => (
-                  <span key={team.id}>
-                    {i > 0 && <span style={{ color: "#8a8aa0" }}> · </span>}
-                    <span style={{ color: team.color }}>
-                      {team.name} {percentage(displayCounts[team.id], totalVotes)}%
+          <div style={{ display: "flex", gap: 12, marginBottom: 24 }}>
+            <div
+              style={{
+                flex: 1,
+                minWidth: 0,
+                borderRadius: 12,
+                border: "1px solid rgba(255,255,255,0.08)",
+                background: "#12121e",
+                padding: "12px 16px",
+                display: "flex",
+                alignItems: "center",
+                gap: 12,
+              }}
+            >
+              <span style={{ fontSize: 16, flexShrink: 0 }}>🏆</span>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <p style={{ fontSize: 12, color: "#8a8aa0", margin: "0 0 2px" }}>{topLabel}</p>
+                <p style={{ fontSize: 14, fontWeight: 700, margin: 0 }}>
+                  {topTeams.map((team, i) => (
+                    <span key={team.id}>
+                      {i > 0 && <span style={{ color: "#8a8aa0" }}> · </span>}
+                      <span style={{ color: team.color }}>
+                        {team.name} {percentage(displayCounts[team.id], totalVotes)}%
+                      </span>
                     </span>
-                  </span>
-                ))}
-              </p>
+                  ))}
+                </p>
+              </div>
             </div>
-            <div style={{ textAlign: "right", flexShrink: 0 }}>
+            <div
+              style={{
+                flexShrink: 0,
+                borderRadius: 12,
+                border: "1px solid rgba(255,255,255,0.08)",
+                background: "#12121e",
+                padding: "12px 16px",
+                display: "flex",
+                flexDirection: "column",
+                justifyContent: "center",
+                alignItems: "flex-end",
+              }}
+            >
               <p style={{ fontSize: 12, color: "#8a8aa0", margin: "0 0 2px" }}>총 투표수</p>
               <p style={{ fontSize: 14, fontWeight: 700, margin: 0 }}>{numberFormatter.format(totalVotes)}</p>
             </div>
@@ -815,15 +882,18 @@ export function TeamVoteArena() {
         >
           {TEAMS.map((team) => {
             const pct = percentage(displayCounts[team.id], totalVotes);
-            const isLastVoted = lastAcceptedChoice === team.id;
+            const isLastVoted = lastClicked === team.id;
             const isLeading = totalVotes > 0 && topTeams.some((t) => t.id === team.id);
             const [nameLine1, nameLine2 = ""] = team.name.split(" ");
+            const teamBursts = bursts.filter((burst) => burst.choice === team.id);
 
             return (
-              <button
+              <motion.button
                 key={team.id}
                 type="button"
-                onClick={() => handleVote(team.id)}
+                animate={isLastVoted ? { x: [0, -6, 6, -6, 6, 0] } : {}}
+                transition={{ duration: 0.25 }}
+                onClick={(event) => handleVote(team.id, event)}
                 style={{
                   position: "relative",
                   display: "flex",
@@ -911,7 +981,30 @@ export function TeamVoteArena() {
                     클릭!
                   </span>
                 </div>
-              </button>
+                <span aria-hidden="true" style={{ position: "absolute", inset: 0, overflow: "hidden", pointerEvents: "none", zIndex: 2 }}>
+                  {teamBursts.map((burst) => (
+                    <i
+                      key={burst.id}
+                      style={{
+                        position: "absolute",
+                        left: `${burst.left}%`,
+                        top: `${burst.top}%`,
+                        fontSize: "clamp(13px, 2vw, 16px)",
+                        fontWeight: 800,
+                        fontStyle: "normal",
+                        color: team.color,
+                        textShadow: "0 1px 3px rgba(0,0,0,.7)",
+                        animation: "km-burst 1s cubic-bezier(.15,.7,.2,1) forwards",
+                        animationDelay: `${burst.delay}ms`,
+                        "--burst-drift": `${burst.drift}px`,
+                        "--burst-rotate": `${burst.rotate}deg`,
+                      } as CSSProperties}
+                    >
+                      {burst.emoji}
+                    </i>
+                  ))}
+                </span>
+              </motion.button>
             );
           })}
         </div>
@@ -1192,7 +1285,7 @@ export function TeamVoteArena() {
         >
           ⚡ 오늘의 밸런스게임 · 투표는 계속됩니다 ⚡
         </p>
-        <p style={{ fontSize: 12, color: "#8a8aa0", margin: "4px 0 0" }}>개인정보 처리 안내</p>
+        <a href="/privacy" style={{ fontSize: 12, color: "#8a8aa0", margin: "4px 0 0", display: "inline-block" }}>개인정보 처리 안내</a>
       </footer>
     </div>
   );
