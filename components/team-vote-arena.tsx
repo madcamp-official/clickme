@@ -757,7 +757,7 @@ export function TeamVoteArena() {
           <p style={{ textAlign: "center", color: "#8a8aa0", fontSize: 13, marginBottom: 16 }}>{loadError}</p>
         )}
 
-        {hasVoted && totalVotes > 0 && (
+        {totalVotes > 0 && (
           <div
             style={{
               marginBottom: 24,
@@ -798,7 +798,7 @@ export function TeamVoteArena() {
           {TEAMS.map((team) => {
             const pct = percentage(displayCounts[team.id], totalVotes);
             const isLastVoted = lastAcceptedChoice === team.id;
-            const isLeading = hasVoted && topTeams.some((t) => t.id === team.id);
+            const isLeading = totalVotes > 0 && topTeams.some((t) => t.id === team.id);
             const [nameLine1, nameLine2 = ""] = team.name.split(" ");
 
             return (
@@ -853,9 +853,9 @@ export function TeamVoteArena() {
                     bottom: 0,
                     left: 0,
                     right: 0,
-                    height: hasVoted ? `${pct}%` : "0%",
+                    height: totalVotes > 0 ? `${pct}%` : "0%",
                     background:
-                      hasVoted && pct > 0 ? `linear-gradient(to top, ${team.color}30, transparent)` : "transparent",
+                      totalVotes > 0 && pct > 0 ? `linear-gradient(to top, ${team.color}30, transparent)` : "transparent",
                     transition: "all 0.5s ease-out",
                   }}
                 />
@@ -890,7 +890,7 @@ export function TeamVoteArena() {
                       color: pct > 0 ? team.color : "#3a3a55",
                     }}
                   >
-                    {hasVoted ? `${pct}%` : "클릭!"}
+                    {totalVotes > 0 ? `${pct}%` : "클릭!"}
                   </span>
                 </div>
               </button>
@@ -898,7 +898,7 @@ export function TeamVoteArena() {
           })}
         </div>
 
-        {hasVoted && totalVotes > 0 && (
+        {totalVotes > 0 && (
           <div
             style={{
               borderRadius: 16,
