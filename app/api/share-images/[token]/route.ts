@@ -37,11 +37,11 @@ export async function GET(
     if (!releaseDatabase) return unavailable();
     const resolved = await (async () => {
       try {
-        const binary = await resolveShareToken(token);
-        if (binary.data || binary.error) return binary;
+        const team = await resolveTeamShareToken(token);
+        if (team.data || team.error) return team;
         // team_share_links is a separate table (see 20260722010000); a token
-        // that isn't a binary share might still be a team one.
-        return await resolveTeamShareToken(token);
+        // that isn't a team share might still be a legacy binary one.
+        return await resolveShareToken(token);
       } finally {
         releaseDatabase();
       }

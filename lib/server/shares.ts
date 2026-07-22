@@ -25,7 +25,14 @@ const SHARE_CARD_MAX_BYTES = 524_288;
 const SHARE_CARD_MIME_TYPES = ["image/png"];
 const NEGATIVE_TOKEN_TTL_MS = 60_000;
 const NEGATIVE_TOKEN_CACHE_MAX = 10_000;
+// Separate maps: a token missing from share_links says nothing about
+// whether it exists in team_share_links (and vice versa). A shared cache
+// would let a miss in one table poison a lookup that should still check the
+// other -- resolveTeamShareToken(token) called right after
+// resolveShareToken(token) already marked it negative would short-circuit
+// to "not found" without ever querying team_share_links.
 const negativeTokenCache = new Map<string, number>();
+const negativeTeamTokenCache = new Map<string, number>();
 let shareCardBucketReady: Promise<boolean> | undefined;
 
 function isMissingBucketError(error: {
@@ -274,30 +281,25 @@ export async function resolveShareToken(token: string) {
   return result;
 }
 
-// team_share_links is a fully separate table from share_links (see the
-// 20260722010000 migration), but token hashes from both systems share one
-// 128-bit HMAC token space -- collision odds are negligible, so reusing the
-// same negativeTokenCache Map for both resolvers is safe and avoids a
-// redundant DB hit on a token that's already known-missing from either side.
 export async function resolveTeamShareToken(token: string) {
   const now = Date.now();
   const tokenHash = hashShareToken(token);
-  const cachedUntil = negativeTokenCache.get(tokenHash);
+  const cachedUntil = negativeTeamTokenCache.get(tokenHash);
   if (cachedUntil && cachedUntil > now) {
     return { data: null, error: null };
   }
-  if (cachedUntil) negativeTokenCache.delete(tokenHash);
+  if (cachedUntil) negativeTeamTokenCache.delete(tokenHash);
 
   const result = await getSupabaseAdmin()
     .rpc("resolve_team_share_link", { p_token_hash: tokenHash })
     .abortSignal(AbortSignal.timeout(2_000))
     .maybeSingle();
   if (!result.data && !result.error) {
-    if (negativeTokenCache.size >= NEGATIVE_TOKEN_CACHE_MAX) {
-      const oldest = negativeTokenCache.keys().next().value;
-      if (oldest) negativeTokenCache.delete(oldest);
+    if (negativeTeamTokenCache.size >= NEGATIVE_TOKEN_CACHE_MAX) {
+      const oldest = negativeTeamTokenCache.keys().next().value;
+      if (oldest) negativeTeamTokenCache.delete(oldest);
     }
-    negativeTokenCache.set(tokenHash, now + NEGATIVE_TOKEN_TTL_MS);
+    negativeTeamTokenCache.set(tokenHash, now + NEGATIVE_TOKEN_TTL_MS);
   }
   return result;
 }
