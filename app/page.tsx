@@ -1,5 +1,5 @@
-import { VoteArena } from "@/components/vote-arena";
+import { TeamVoteArena } from "@/components/team-vote-arena";
 
 export default function Home() {
-  return <VoteArena />;
+  return <TeamVoteArena />;
 }

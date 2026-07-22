@@ -94,12 +94,12 @@ assert_header() {
 log "checking home page"
 status="$(request GET / "$WORK_DIR/home.html" "$WORK_DIR/home.headers")"
 expect_status "$status" 200 "home page"
-grep -q '엄성현' "$WORK_DIR/home.html" || {
-  printf 'ERROR: home page does not contain 엄성현\n' >&2
+grep -q 'KBO 야구팀' "$WORK_DIR/home.html" || {
+  printf 'ERROR: home page does not contain KBO 야구팀\n' >&2
   exit 1
 }
-grep -q '안건호' "$WORK_DIR/home.html" || {
-  printf 'ERROR: home page does not contain 안건호\n' >&2
+grep -q 'KIA' "$WORK_DIR/home.html" || {
+  printf 'ERROR: home page does not contain KIA\n' >&2
   exit 1
 }
 
@@ -148,6 +148,30 @@ assert_json "$WORK_DIR/topics.json" \
   'Array.isArray(value?.topics)' \
   'public topic history endpoint'
 
+log "checking public team-results contract"
+status="$(request GET /api/team-results "$WORK_DIR/team-results.json" "$WORK_DIR/team-results.headers")"
+expect_status "$status" 200 "team-results endpoint"
+assert_json "$WORK_DIR/team-results.json" \
+  'Number.isInteger(value?.counts?.kia) && Number.isInteger(value?.counts?.kiwoom) && Number.isInteger(value?.total) && ["scheduled", "active", "protected", "read_only", "ended"].includes(value?.campaign?.status)' \
+  'public team-results endpoint'
+
+log "checking public team-comments contract"
+status="$(request GET /api/team-comments "$WORK_DIR/team-comments-get.json" "$WORK_DIR/team-comments-get.headers")"
+expect_status "$status" 200 "GET team-comments endpoint"
+assert_json "$WORK_DIR/team-comments-get.json" \
+  'Array.isArray(value?.comments)' \
+  'public team-comments endpoint'
+status="$(request POST /api/team-comments "$WORK_DIR/team-comments-post.json" "$WORK_DIR/team-comments-post.headers" \
+  --header 'content-type: application/json' --data '{}')"
+expect_status "$status" 403 "POST team-comments endpoint without Origin"
+
+log "checking public team-topics history contract"
+status="$(request GET /api/team-topics/history "$WORK_DIR/team-topics.json" "$WORK_DIR/team-topics.headers")"
+expect_status "$status" 200 "team-topics history endpoint"
+assert_json "$WORK_DIR/team-topics.json" \
+  'Array.isArray(value?.topics)' \
+  'public team-topics history endpoint'
+
 log "checking private readiness boundary"
 status="$(request GET /api/ready "$WORK_DIR/public-ready.json" "$WORK_DIR/public-ready.headers")"
 expect_status "$status" 404 "public readiness endpoint"
@@ -177,6 +201,10 @@ expect_status "$status" 403 "session request without Origin"
 status="$(request POST /api/vote "$WORK_DIR/vote-no-origin.json" "$WORK_DIR/vote-no-origin.headers" \
   --header 'content-type: application/json' --data '{"choice":"invalid-smoke-value"}')"
 expect_status "$status" 403 "vote request without Origin"
+
+status="$(request POST /api/team-vote "$WORK_DIR/team-vote-no-origin.json" "$WORK_DIR/team-vote-no-origin.headers" \
+  --header 'content-type: application/json' --data '{"choice":"invalid-smoke-value"}')"
+expect_status "$status" 403 "team-vote request without Origin"
 
 status="$(request POST /api/vote "$WORK_DIR/vote-wrong-content-type.json" "$WORK_DIR/vote-wrong-content-type.headers" \
   --header "Origin: https://${PUBLIC_HOST}" \

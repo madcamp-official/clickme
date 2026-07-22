@@ -12,19 +12,19 @@ function metadataBase(): URL {
 
 export const metadata: Metadata = {
   metadataBase: metadataBase(),
-  title: "엄성현 vs 안건호 — 오늘의 밸런스게임",
-  description: "CORTIS 엄성현과 안건호, 최애를 계속 눌러 참여하세요.",
+  title: "가장 좋아하는 KBO 야구팀은? — 오늘의 밸런스게임",
+  description: "KBO 10개 구단 중 가장 좋아하는 팀을 계속 눌러 참여하세요.",
   openGraph: {
-    title: "엄성현 vs 안건호 — 오늘의 밸런스게임",
-    description: "엄성현? 안건호? 최애를 계속 눌러 보세요.",
+    title: "가장 좋아하는 KBO 야구팀은? — 오늘의 밸런스게임",
+    description: "좋아하는 팀을 클릭하세요! 클릭할수록 더 많이 투표돼요.",
     type: "website",
     locale: "ko_KR",
     siteName: "오늘의 밸런스게임",
   },
   twitter: {
     card: "summary",
-    title: "엄성현 vs 안건호",
-    description: "최애를 계속 눌러 보세요.",
+    title: "가장 좋아하는 KBO 야구팀은?",
+    description: "좋아하는 팀을 계속 눌러 보세요.",
   },
 };
 
