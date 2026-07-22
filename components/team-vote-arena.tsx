@@ -283,10 +283,6 @@ function shortQueryValue(params: URLSearchParams, key: string): string | null {
   return value ? value.slice(0, 128) : null;
 }
 
-function isVotingOpen(status: CampaignStatus | undefined): boolean {
-  return status === "active";
-}
-
 function isCommentsOpen(status: CampaignStatus | undefined): boolean {
   return status === "active";
 }
@@ -487,6 +483,23 @@ export function TeamVoteArena() {
     return () => window.clearTimeout(initialLoad);
   }, [refreshResults]);
 
+  // The vote dispatch loop below only shifts queued votes once a session
+  // already exists (sessionRef.current), and only initializeSession() ever
+  // sets that ref. Bootstrap it eagerly on mount so the very first click
+  // doesn't sit in the queue waiting on a session that nothing has asked for.
+  useEffect(() => {
+    let cancelled = false;
+    const bootstrap = window.setTimeout(() => {
+      void initializeSession().catch((error: unknown) => {
+        if (!cancelled) showNotice({ tone: "error", message: friendlyError(error) });
+      });
+    }, 0);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(bootstrap);
+    };
+  }, [initializeSession, showNotice]);
+
   useEffect(() => {
     function clearPoll() {
       window.clearTimeout(resultsPollTimer.current);
@@ -677,15 +690,16 @@ export function TeamVoteArena() {
   }, [submitVote]);
 
   const handleVote = useCallback((choice: TeamChoice) => {
-    if (!isVotingOpen((campaignRef.current ?? session?.campaign)?.status)) {
-      showNotice({ tone: "error", message: "지금은 투표할 수 없어요." });
-      return;
-    }
+    // Campaign status isn't known client-side until the first /api/team-results
+    // response lands, so this doesn't pre-block on isVotingOpen (that would
+    // reject every click during the brief initial-load window). The server is
+    // the actual enforcement point: cast_team_vote rejects with
+    // campaign_not_active/campaign_ended, handled below via the 410 branch.
     if (voteQueue.current.length >= VOTE_QUEUE_MAX_SIZE) return;
     voteSequence.current += 1;
     pendingVoteCount.current += 1;
     voteQueue.current.push({ choice, requestId: createUuid(), sequence: voteSequence.current });
-  }, [session, showNotice]);
+  }, []);
 
   // Server counts already fold in confirmed votes absorbed by earlier polls
   // (see reconcileResults); adding the remaining un-absorbed confirmedVotes
