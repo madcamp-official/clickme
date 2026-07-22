@@ -890,7 +890,7 @@ export function TeamVoteArena() {
                       color: pct > 0 ? team.color : "#3a3a55",
                     }}
                   >
-                    {totalVotes > 0 ? `${pct}%` : "클릭!"}
+                    클릭!
                   </span>
                 </div>
               </button>
