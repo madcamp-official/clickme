@@ -68,7 +68,6 @@ type CommentEntry = {
 };
 
 type TopicHistoryResult = {
-  choice: TeamChoice;
   label: string;
   voteCount: number;
 };
@@ -78,6 +77,22 @@ type TopicHistoryEntry = {
   title: string;
   archivedAt: string;
   results: TopicHistoryResult[];
+};
+
+// The team-voting system (this component) and the earlier binary dip/pour
+// system (components/vote-arena.tsx) keep fully separate history tables, so
+// team_topic_history alone only goes back to the first team topic. Every
+// earlier day's topic (탕수육, 카리나 vs 장원영, 스페인 vs 아르헨티나, ...) still
+// lives in the binary topic_history table via /api/topics/history. Both are
+// fetched and merged below so "이전 주제" reads as one continuous timeline.
+type BinaryTopicHistoryEntry = {
+  id: string;
+  title: string;
+  optionALabel: string;
+  optionACount: number;
+  optionBLabel: string;
+  optionBCount: number;
+  archivedAt: string;
 };
 
 type Notice = { tone: "success" | "error"; message: string };
@@ -220,6 +235,12 @@ function isCommentsResponse(value: unknown): value is { comments: CommentEntry[]
 }
 
 function isTopicHistoryResponse(value: unknown): value is { topics: TopicHistoryEntry[] } {
+  if (!value || typeof value !== "object") return false;
+  const response = value as { topics?: unknown };
+  return Array.isArray(response.topics);
+}
+
+function isBinaryTopicHistoryResponse(value: unknown): value is { topics: BinaryTopicHistoryEntry[] } {
   if (!value || typeof value !== "object") return false;
   const response = value as { topics?: unknown };
   return Array.isArray(response.topics);
@@ -535,12 +556,31 @@ export function TeamVoteArena() {
   useEffect(() => {
     let cancelled = false;
     void (async () => {
-      try {
-        const response = await requestJson<unknown>("/api/team-topics/history");
-        if (!cancelled && isTopicHistoryResponse(response)) setTopicHistory(response.topics);
-      } catch {
-        // Past topics are non-critical; leave the section empty on failure.
-      }
+      const [teamResult, binaryResult] = await Promise.allSettled([
+        requestJson<unknown>("/api/team-topics/history"),
+        requestJson<unknown>("/api/topics/history"),
+      ]);
+      if (cancelled) return;
+
+      const teamTopics = teamResult.status === "fulfilled" && isTopicHistoryResponse(teamResult.value)
+        ? teamResult.value.topics
+        : [];
+      const binaryTopics = binaryResult.status === "fulfilled" && isBinaryTopicHistoryResponse(binaryResult.value)
+        ? binaryResult.value.topics.map((topic): TopicHistoryEntry => ({
+          id: topic.id,
+          title: topic.title,
+          archivedAt: topic.archivedAt,
+          results: [
+            { label: topic.optionALabel, voteCount: topic.optionACount },
+            { label: topic.optionBLabel, voteCount: topic.optionBCount },
+          ],
+        }))
+        : [];
+
+      const merged = [...teamTopics, ...binaryTopics].sort(
+        (a, b) => new Date(b.archivedAt).getTime() - new Date(a.archivedAt).getTime(),
+      );
+      setTopicHistory(merged);
     })();
     return () => {
       cancelled = true;
