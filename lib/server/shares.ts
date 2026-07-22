@@ -3,9 +3,22 @@ import { createHash, createHmac } from "node:crypto";
 import sharp from "sharp";
 
 import { CRITICAL_DATABASE_RESERVE, tryAcquireDatabase } from "./capacity";
-import type { Choice } from "./contracts";
+import type { Choice, TeamChoice } from "./contracts";
 import { getSiteUrl, getVisitorHashSecret } from "./env";
 import { getSupabaseAdmin } from "./supabase";
+
+export const TEAM_CARD_INFO: Record<TeamChoice, { name: string; color: string }> = {
+  kia: { name: "KIA 타이거즈", color: "#E61E23" },
+  samsung: { name: "삼성 라이온즈", color: "#0066B3" },
+  lg: { name: "LG 트윈스", color: "#C60C30" },
+  doosan: { name: "두산 베어스", color: "#5A7FC2" },
+  kt: { name: "KT 위즈", color: "#D0021B" },
+  ssg: { name: "SSG 랜더스", color: "#CE0E2D" },
+  lotte: { name: "롯데 자이언츠", color: "#0055A4" },
+  hanwha: { name: "한화 이글스", color: "#FF6600" },
+  nc: { name: "NC 다이노스", color: "#315288" },
+  kiwoom: { name: "키움 히어로즈", color: "#820024" },
+};
 
 export const SHARE_CARD_BUCKET = "share-cards";
 const SHARE_CARD_MAX_BYTES = 524_288;
@@ -81,6 +94,36 @@ export async function renderShareCard(
   return sharp(Buffer.from(svg)).png({ compressionLevel: 9 }).toBuffer();
 }
 
+export async function renderTeamShareCard(
+  choice: TeamChoice,
+  voteCountValue: unknown,
+  totalCountValue: unknown,
+): Promise<Buffer> {
+  const voteCount = safeCount(voteCountValue);
+  const total = safeCount(totalCountValue);
+  const percent = total === 0 ? 0 : Math.round((voteCount / total) * 100);
+  const team = TEAM_CARD_INFO[choice];
+  const barWidth = Math.max(1, Math.round(960 * percent / 100));
+  const svg = `
+    <svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630">
+      <defs>
+        <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0" stop-color="#09090f"/><stop offset="1" stop-color="#12121e"/>
+        </linearGradient>
+      </defs>
+      <rect width="1200" height="630" fill="url(#bg)"/>
+      <rect x="38" y="38" width="1124" height="554" rx="28" fill="none" stroke="${team.color}" stroke-width="8"/>
+      <text x="600" y="128" fill="#f5f5fa" font-family="sans-serif" font-size="34" font-weight="700" text-anchor="middle" letter-spacing="6">⚡ 오늘의 밸런스게임 ⚡</text>
+      <text x="600" y="240" fill="${team.color}" font-family="sans-serif" font-size="80" font-weight="900" text-anchor="middle">나는 ${team.name}파!</text>
+      <rect x="120" y="320" width="960" height="74" rx="37" fill="#1c1c2c" stroke="#f5f5fa" stroke-width="4"/>
+      <rect x="120" y="320" width="${barWidth}" height="74" rx="37" fill="${team.color}"/>
+      <text x="600" y="470" fill="${team.color}" font-family="sans-serif" font-size="64" font-weight="900" text-anchor="middle">${team.name} ${percent}%</text>
+      <text x="600" y="520" fill="#8a8aa0" font-family="sans-serif" font-size="30" text-anchor="middle">전체 ${total.toLocaleString("ko-KR")}표 중</text>
+      <text x="600" y="575" fill="#f5f5fa" font-family="sans-serif" font-size="30" text-anchor="middle">당신의 최애 구단은?</text>
+    </svg>`;
+  return sharp(Buffer.from(svg)).png({ compressionLevel: 9 }).toBuffer();
+}
+
 async function configureShareCardBucket(): Promise<boolean> {
   const storage = getSupabaseAdmin().storage;
   const existing = await storage.getBucket(SHARE_CARD_BUCKET);
@@ -124,6 +167,7 @@ export async function storeShareCard(
   campaignId: string,
   shareId: string,
   png: Buffer,
+  table: "share_links" | "team_share_links" = "share_links",
 ): Promise<string | null> {
   if (!(await ensureShareCardBucket())) return null;
 
@@ -146,7 +190,7 @@ export async function storeShareCard(
   const updateResult = await (async () => {
     try {
       return await supabase
-        .from("share_links")
+        .from(table)
         .update({ image_path: path })
         .eq("id", shareId)
         .eq("campaign_id", campaignId)
@@ -177,7 +221,7 @@ export async function storeShareCard(
   const confirmation = await (async () => {
     try {
       return await supabase
-        .from("share_links")
+        .from(table)
         .select("image_path")
         .eq("id", shareId)
         .eq("campaign_id", campaignId)
@@ -218,6 +262,34 @@ export async function resolveShareToken(token: string) {
 
   const result = await getSupabaseAdmin()
     .rpc("resolve_share_link", { p_token_hash: tokenHash })
+    .abortSignal(AbortSignal.timeout(2_000))
+    .maybeSingle();
+  if (!result.data && !result.error) {
+    if (negativeTokenCache.size >= NEGATIVE_TOKEN_CACHE_MAX) {
+      const oldest = negativeTokenCache.keys().next().value;
+      if (oldest) negativeTokenCache.delete(oldest);
+    }
+    negativeTokenCache.set(tokenHash, now + NEGATIVE_TOKEN_TTL_MS);
+  }
+  return result;
+}
+
+// team_share_links is a fully separate table from share_links (see the
+// 20260722010000 migration), but token hashes from both systems share one
+// 128-bit HMAC token space -- collision odds are negligible, so reusing the
+// same negativeTokenCache Map for both resolvers is safe and avoids a
+// redundant DB hit on a token that's already known-missing from either side.
+export async function resolveTeamShareToken(token: string) {
+  const now = Date.now();
+  const tokenHash = hashShareToken(token);
+  const cachedUntil = negativeTokenCache.get(tokenHash);
+  if (cachedUntil && cachedUntil > now) {
+    return { data: null, error: null };
+  }
+  if (cachedUntil) negativeTokenCache.delete(tokenHash);
+
+  const result = await getSupabaseAdmin()
+    .rpc("resolve_team_share_link", { p_token_hash: tokenHash })
     .abortSignal(AbortSignal.timeout(2_000))
     .maybeSingle();
   if (!result.data && !result.error) {

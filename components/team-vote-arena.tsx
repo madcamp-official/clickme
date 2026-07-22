@@ -101,6 +101,11 @@ type BinaryTopicHistoryEntry = {
 
 type Notice = { tone: "success" | "error"; message: string };
 
+type ShareArtifact = {
+  shareUrl: string;
+  imageUrl: string | null;
+};
+
 type Burst = {
   id: number;
   emoji: string;
@@ -264,6 +269,15 @@ function isBinaryTopicHistoryResponse(value: unknown): value is { topics: Binary
   return Array.isArray(response.topics);
 }
 
+function isShareArtifact(value: unknown): value is ShareArtifact {
+  if (!value || typeof value !== "object") return false;
+  const artifact = value as Partial<ShareArtifact>;
+  return (
+    typeof artifact.shareUrl === "string"
+    && (typeof artifact.imageUrl === "string" || artifact.imageUrl === null || artifact.imageUrl === undefined)
+  );
+}
+
 function friendlyError(error: unknown): string {
   if (error instanceof ApiRequestError) {
     if (error.status === 429) return "너무 빠르게 요청하고 있어요. 잠시 후 다시 시도해 주세요.";
@@ -301,6 +315,28 @@ function shortQueryValue(params: URLSearchParams, key: string): string | null {
   return value ? value.slice(0, 128) : null;
 }
 
+async function copyText(value: string): Promise<void> {
+  if (navigator.clipboard?.writeText) {
+    await navigator.clipboard.writeText(value);
+    return;
+  }
+
+  const control = document.createElement("textarea");
+  control.value = value;
+  control.setAttribute("readonly", "");
+  control.style.position = "fixed";
+  control.style.opacity = "0";
+  document.body.append(control);
+  control.select();
+  const copied = document.execCommand("copy");
+  control.remove();
+  if (!copied) throw new Error("copy failed");
+}
+
+function shareMessage(team: Team): string {
+  return `나는 ${team.name}파! 당신의 최애 구단은?`;
+}
+
 function isCommentsOpen(status: CampaignStatus | undefined): boolean {
   return status === "active";
 }
@@ -315,7 +351,7 @@ function formatArchivedDate(iso: string): string {
   return `${date.getFullYear()}.${String(date.getMonth() + 1).padStart(2, "0")}.${String(date.getDate()).padStart(2, "0")}`;
 }
 
-export function TeamVoteArena() {
+export function TeamVoteArena({ referralToken }: { referralToken?: string } = {}) {
   const [results, setResults] = useState<TeamVoteResults | null>(null);
   const [session, setSession] = useState<SessionContext | null>(null);
   const [confirmedVotes, setConfirmedVotes] = useState<Record<TeamChoice, number>>(zeroCounts());
@@ -330,6 +366,8 @@ export function TeamVoteArena() {
   const [topicHistory, setTopicHistory] = useState<TopicHistoryEntry[]>([]);
   const [showPastTopics, setShowPastTopics] = useState(false);
   const [bursts, setBursts] = useState<Burst[]>([]);
+  const [isShareLoading, setIsShareLoading] = useState(false);
+  const [shareArtifact, setShareArtifact] = useState<ShareArtifact | null>(null);
 
   const sessionRef = useRef<SessionContext | null>(null);
   const sessionRequest = useRef<Promise<SessionContext> | null>(null);
@@ -349,6 +387,9 @@ export function TeamVoteArena() {
   const footerClickTimes = useRef<number[]>([]);
   const burstId = useRef(0);
   const burstTimers = useRef<number[]>([]);
+  const shareArtifactRequest = useRef<Promise<ShareArtifact> | null>(null);
+  const shareArtifactChoice = useRef<TeamChoice | null>(null);
+  const shareIdempotencyKey = useRef<string | null>(null);
 
   const showNotice = useCallback((next: Notice) => {
     window.clearTimeout(noticeTimer.current);
@@ -649,6 +690,123 @@ export function TeamVoteArena() {
     }
   }
 
+  const getShareArtifact = useCallback(async (): Promise<ShareArtifact> => {
+    if (shareArtifact && shareArtifactChoice.current === lastAcceptedChoice) return shareArtifact;
+    if (shareArtifactRequest.current) return shareArtifactRequest.current;
+    if (!lastAcceptedChoice) throw new Error("vote required");
+
+    const artifactChoice = lastAcceptedChoice;
+    let activeSession = await initializeSession();
+    const idempotencyKey = shareIdempotencyKey.current ?? createUuid();
+    shareIdempotencyKey.current = idempotencyKey;
+
+    const request = (async () => {
+      for (let attempt = 0; attempt < 2; attempt += 1) {
+        try {
+          const response = await requestJson<unknown>("/api/team-shares", {
+            method: "POST",
+            headers: {
+              "X-Clickme-CSRF": activeSession.csrfToken,
+              "Idempotency-Key": idempotencyKey,
+            },
+            body: JSON.stringify({
+              choice: artifactChoice,
+              sessionId: activeSession.sessionId,
+              pageViewId: activeSession.pageViewId,
+            }),
+          });
+          if (!isShareArtifact(response)) throw new Error("invalid share response");
+          const artifact = { shareUrl: response.shareUrl, imageUrl: response.imageUrl ?? null };
+          if (lastAcceptedChoiceRef.current === artifactChoice) {
+            shareArtifactChoice.current = artifactChoice;
+            setShareArtifact(artifact);
+          }
+          return artifact;
+        } catch (error) {
+          if (
+            attempt === 0
+            && error instanceof ApiRequestError
+            && error.status === 409
+            && error.code === "SESSION_EXPIRED"
+          ) {
+            activeSession = await refreshExpiredSession(activeSession.sessionId);
+            continue;
+          }
+          throw error;
+        }
+      }
+      throw new Error("share request failed");
+    })().finally(() => {
+      shareArtifactRequest.current = null;
+    });
+
+    shareArtifactRequest.current = request;
+    return request;
+  }, [initializeSession, lastAcceptedChoice, refreshExpiredSession, shareArtifact]);
+
+  async function resolveShareUrl(): Promise<{ url: string; generated: boolean }> {
+    try {
+      const artifact = await getShareArtifact();
+      return { url: artifact.shareUrl, generated: true };
+    } catch {
+      return { url: `${window.location.origin}/`, generated: false };
+    }
+  }
+
+  async function handleShare() {
+    if (!lastAcceptedChoice || isShareLoading) return;
+    setIsShareLoading(true);
+    const team = TEAMS.find((t) => t.id === lastAcceptedChoice);
+
+    try {
+      const { url, generated } = await resolveShareUrl();
+      const shareData = {
+        title: "오늘의 밸런스게임 - 가장 좋아하는 KBO 야구팀은?",
+        text: team ? shareMessage(team) : "가장 좋아하는 KBO 야구팀은?",
+        url,
+      };
+
+      if (navigator.share) {
+        try {
+          await navigator.share(shareData);
+        } catch (error) {
+          if (!(error instanceof DOMException && error.name === "AbortError")) {
+            await copyText(url);
+            showNotice({ tone: "success", message: "링크를 복사했어요. 친구를 불러와 봐요!" });
+          }
+        }
+      } else {
+        await copyText(url);
+        showNotice({ tone: "success", message: "링크를 복사했어요. 친구를 불러와 봐요!" });
+      }
+
+      if (!generated) {
+        showNotice({ tone: "error", message: "추천 링크를 만들지 못해 기본 링크를 공유했어요." });
+      }
+    } catch (error) {
+      showNotice({ tone: "error", message: friendlyError(error) });
+    } finally {
+      setIsShareLoading(false);
+    }
+  }
+
+  async function handleCopyLink() {
+    if (!lastAcceptedChoice || isShareLoading) return;
+    setIsShareLoading(true);
+    try {
+      const { url, generated } = await resolveShareUrl();
+      await copyText(url);
+      showNotice({
+        tone: generated ? "success" : "error",
+        message: generated ? "도전 링크를 복사했어요!" : "기본 링크를 복사했어요.",
+      });
+    } catch (error) {
+      showNotice({ tone: "error", message: friendlyError(error) });
+    } finally {
+      setIsShareLoading(false);
+    }
+  }
+
   const submitVote = useCallback(async (item: QueuedVote) => {
     let activeSession: SessionContext | null = null;
 
@@ -672,6 +830,12 @@ export function TeamVoteArena() {
           }
           if (item.sequence > latestAcceptedSequence.current) {
             latestAcceptedSequence.current = item.sequence;
+            if (lastAcceptedChoiceRef.current !== item.choice) {
+              setShareArtifact(null);
+              shareArtifactChoice.current = null;
+              shareArtifactRequest.current = null;
+              shareIdempotencyKey.current = null;
+            }
             lastAcceptedChoiceRef.current = item.choice;
             setLastAcceptedChoice(item.choice);
           }
@@ -791,6 +955,28 @@ export function TeamVoteArena() {
   return (
     <div style={{ minHeight: "100vh", background: "#09090f", color: "#f5f5fa", fontFamily: "'Noto Sans KR',sans-serif" }}>
       <main style={{ maxWidth: 900, margin: "0 auto", padding: "0 16px 80px" }}>
+        {referralToken && (
+          <aside
+            data-analytics-section="referral-banner"
+            style={{
+              marginTop: 24,
+              display: "flex",
+              alignItems: "center",
+              gap: 12,
+              borderRadius: 12,
+              border: "1px solid rgba(255,255,255,0.08)",
+              background: "#12121e",
+              padding: "12px 16px",
+            }}
+          >
+            <span aria-hidden="true" style={{ fontSize: 16, flexShrink: 0 }}>🔥</span>
+            <div>
+              <strong style={{ display: "block", fontSize: 14 }}>친구가 당신의 최애 구단을 기다리고 있어요</strong>
+              <p style={{ margin: "2px 0 0", fontSize: 13, color: "#8a8aa0" }}>가장 좋아하는 KBO 야구팀, 골라 주세요!</p>
+            </div>
+          </aside>
+        )}
+
         <div style={{ paddingTop: 40, paddingBottom: 24, textAlign: "center" }} data-analytics-section="header">
           <p
             style={{
@@ -1096,6 +1282,68 @@ export function TeamVoteArena() {
             })}
           </div>
         )}
+
+        {hasVoted && lastAcceptedChoice && campaignStatus === "active" && (() => {
+          const team = TEAMS.find((t) => t.id === lastAcceptedChoice);
+          if (!team) return null;
+          const pct = percentage(displayCounts[lastAcceptedChoice], totalVotes);
+          return (
+            <section
+              data-analytics-section="share-card"
+              style={{
+                borderRadius: 16,
+                border: `1px solid ${team.color}80`,
+                background: "#12121e",
+                padding: 20,
+                marginBottom: 24,
+              }}
+            >
+              <p style={{ fontSize: 12, color: "#8a8aa0", margin: "0 0 6px" }}>내 선택 결과</p>
+              <h2 style={{ fontSize: 20, margin: "0 0 8px" }}>
+                나는 <strong style={{ color: team.color }}>{team.name}파!</strong>
+              </h2>
+              <p style={{ fontSize: 13, color: "#8a8aa0", margin: "0 0 16px" }}>
+                지금 {team.name}는 <b style={{ color: "#f5f5fa" }}>{pct}%</b>예요.
+              </p>
+              <button
+                type="button"
+                disabled={isShareLoading}
+                onClick={() => void handleShare()}
+                style={{
+                  width: "100%",
+                  padding: "12px 16px",
+                  borderRadius: 12,
+                  background: team.color,
+                  border: "none",
+                  color: "#ffffff",
+                  fontSize: 14,
+                  fontWeight: 700,
+                  cursor: isShareLoading ? "default" : "pointer",
+                  opacity: isShareLoading ? 0.6 : 1,
+                }}
+              >
+                {isShareLoading ? "도전 링크 만드는 중…" : "결과 공유하기"} <span aria-hidden="true">↗</span>
+              </button>
+              <div style={{ marginTop: 8, textAlign: "center" }}>
+                <button
+                  type="button"
+                  disabled={isShareLoading}
+                  onClick={() => void handleCopyLink()}
+                  style={{
+                    background: "none",
+                    border: "none",
+                    color: "#8a8aa0",
+                    fontSize: 13,
+                    cursor: isShareLoading ? "default" : "pointer",
+                    textDecoration: "underline",
+                  }}
+                >
+                  링크 복사
+                </button>
+              </div>
+            </section>
+          );
+        })()}
 
         <section
           style={{ borderRadius: 16, border: "1px solid rgba(255,255,255,0.08)", background: "#12121e", padding: 20, marginBottom: 24 }}

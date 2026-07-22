@@ -115,6 +115,7 @@ limit_req_zone $clickme_visitor_limit_key zone=clickme_session_visitor:10m rate=
 limit_req_zone $clickme_session_limit_key zone=clickme_heartbeat:10m rate=6r/m;
 limit_req_zone $clickme_session_limit_key zone=clickme_events:10m rate=12r/m;
 limit_req_zone $clickme_visitor_limit_key zone=clickme_shares:10m rate=10r/m;
+limit_req_zone $clickme_visitor_limit_key zone=clickme_team_shares:10m rate=10r/m;
 limit_req_zone $clickme_comments_post_visitor zone=clickme_comments:10m rate=10r/m;
 limit_req_zone $clickme_comments_post_ip zone=clickme_comments_net:10m rate=60r/s;
 limit_req_zone $clickme_client_ip zone=clickme_team_vote_net:10m rate=20r/s;
@@ -359,6 +360,22 @@ server {
         client_max_body_size 4k;
         limit_req zone=clickme_mutation_net burst=30 nodelay;
         limit_req zone=clickme_shares burst=5 nodelay;
+        proxy_pass http://clickme_next;
+    }
+
+    # 10-team KBO share-card creation, guarded identically to /api/shares but
+    # on its own zone so it cannot be starved by (or starve) binary shares.
+    location = /api/team-shares {
+        if ($request_method != POST) { return 405; }
+        if ($clickme_origin_ok = 0) { return 403; }
+        if ($clickme_fetch_site_ok = 0) { return 403; }
+        if ($clickme_json_ok = 0) { return 415; }
+        if ($clickme_csrf_present = 0) { return 403; }
+        if ($clickme_session_present = 0) { return 409; }
+
+        client_max_body_size 4k;
+        limit_req zone=clickme_mutation_net burst=30 nodelay;
+        limit_req zone=clickme_team_shares burst=5 nodelay;
         proxy_pass http://clickme_next;
     }
 

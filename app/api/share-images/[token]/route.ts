@@ -6,7 +6,7 @@ import {
   shareImageCapacity,
   tryAcquireDatabase,
 } from "../../../../lib/server/capacity";
-import { downloadShareCard, resolveShareToken } from "../../../../lib/server/shares";
+import { downloadShareCard, resolveShareToken, resolveTeamShareToken } from "../../../../lib/server/shares";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -37,7 +37,11 @@ export async function GET(
     if (!releaseDatabase) return unavailable();
     const resolved = await (async () => {
       try {
-        return await resolveShareToken(token);
+        const binary = await resolveShareToken(token);
+        if (binary.data || binary.error) return binary;
+        // team_share_links is a separate table (see 20260722010000); a token
+        // that isn't a binary share might still be a team one.
+        return await resolveTeamShareToken(token);
       } finally {
         releaseDatabase();
       }

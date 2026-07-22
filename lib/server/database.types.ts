@@ -451,6 +451,51 @@ export type Database = {
         };
         Relationships: [];
       };
+      team_share_links: {
+        Row: {
+          id: string;
+          campaign_id: string;
+          creator_visitor_hash: string;
+          session_id: string;
+          page_view_id: string;
+          idempotency_key: string;
+          token_hash: string;
+          choice: TeamChoice;
+          vote_count: number;
+          total_count: number;
+          image_path: string | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          campaign_id: string;
+          creator_visitor_hash: string;
+          session_id: string;
+          page_view_id: string;
+          idempotency_key: string;
+          token_hash: string;
+          choice: TeamChoice;
+          vote_count: number;
+          total_count: number;
+          image_path?: string | null;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          campaign_id?: string;
+          creator_visitor_hash?: string;
+          session_id?: string;
+          page_view_id?: string;
+          idempotency_key?: string;
+          token_hash?: string;
+          choice?: TeamChoice;
+          vote_count?: number;
+          total_count?: number;
+          image_path?: string | null;
+          created_at?: string;
+        };
+        Relationships: [];
+      };
       vote_count_shards: {
         Row: {
           campaign_id: string;
@@ -1046,6 +1091,24 @@ export type Database = {
           pour_count: number;
         }>;
       };
+      create_team_share_link: {
+        Args: {
+          p_visitor_hash: string;
+          p_session_id: string;
+          p_page_view_id: string;
+          p_idempotency_key: string;
+          p_token_hash: string;
+          p_choice: TeamChoice;
+        };
+        Returns: Array<{
+          share_id: string;
+          campaign_id: string;
+          created: boolean;
+          image_path: string | null;
+          vote_count: number;
+          total_count: number;
+        }>;
+      };
       get_campaign_status: {
         Args: Record<PropertyKey, never>;
         Returns: Array<{
@@ -1171,6 +1234,18 @@ export type Database = {
           choice: Choice;
           dip_count: number;
           pour_count: number;
+          image_path: string | null;
+          created_at: string;
+        }>;
+      };
+      resolve_team_share_link: {
+        Args: { p_token_hash: string };
+        Returns: Array<{
+          share_id: string;
+          campaign_id: string;
+          choice: TeamChoice;
+          vote_count: number;
+          total_count: number;
           image_path: string | null;
           created_at: string;
         }>;
