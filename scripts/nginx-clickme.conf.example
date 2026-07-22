@@ -456,7 +456,15 @@ server {
         proxy_ignore_headers Set-Cookie;
         proxy_hide_header Set-Cookie;
         proxy_hide_header Cache-Control;
-        add_header Cache-Control "public, max-age=31536000, immutable" always;
+        # No `always`: a bare add_header only applies to normal (2xx/3xx)
+        # responses. With `always` this immutable 1-year header was also
+        # being slapped onto 404s, which taught Cloudflare's edge (and any
+        # browser) to cache a transient "not found" for a year even though
+        # nginx's own proxy_cache above correctly never cached it (`200
+        # 365d` only caches successes) -- discovered when a real 404, caused
+        # by an unrelated app-level bug, stuck around for the tunnel's
+        # lifetime after the app-level bug was already fixed and redeployed.
+        add_header Cache-Control "public, max-age=31536000, immutable";
         add_header X-Robots-Tag "noindex, nofollow, noarchive" always;
 
         proxy_pass http://clickme_next;
