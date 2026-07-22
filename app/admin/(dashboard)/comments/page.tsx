@@ -6,19 +6,25 @@ import { CommentDeleteButton } from "./comment-delete-button";
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
+// comments and team_comments are fully separate tables (20260721000000).
+// Both are fetched and merged by created_at so moderators see (and can
+// delete) today's team-voting comments alongside any binary ones, instead
+// of team comments being invisible here entirely.
 export default async function AdminCommentsPage() {
-  const { data } = await getSupabaseAdmin()
-    .from("comments")
-    .select("id, choice, body, created_at")
-    .order("created_at", { ascending: false })
-    .limit(50);
+  const supabase = getSupabaseAdmin();
+  const [binary, team] = await Promise.all([
+    supabase.from("comments").select("id, choice, body, created_at").order("created_at", { ascending: false }).limit(50),
+    supabase.from("team_comments").select("id, choice, body, created_at").order("created_at", { ascending: false }).limit(50),
+  ]);
 
-  const comments = data ?? [];
+  const comments = [...(binary.data ?? []), ...(team.data ?? [])]
+    .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+    .slice(0, 50);
 
   return (
     <>
       <h1 className={styles.heading}>댓글 모더레이션</h1>
-      <p className={styles.pageHint}>최근 50건입니다. 삭제하면 되돌릴 수 없습니다.</p>
+      <p className={styles.pageHint}>최근 50건입니다 (이진 + 팀 통합). 삭제하면 되돌릴 수 없습니다.</p>
       {comments.length > 0 ? (
         <div className={styles.tableWrap}>
           <table className={styles.table}>
