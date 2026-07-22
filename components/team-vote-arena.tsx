@@ -117,6 +117,9 @@ const VOTE_DISPATCH_INTERVAL_MS = 80;
 const VOTE_QUEUE_MAX_SIZE = 30;
 const RESULTS_POLL_MIN_MS = 1_000;
 const RESULTS_POLL_MAX_BACKOFF_MS = 60_000;
+const FOOTER_EASTER_EGG_CLICKS = 10;
+const FOOTER_EASTER_EGG_WINDOW_MS = 5_000;
+const FOOTER_EASTER_EGG_ROUTE = "/api/next";
 
 function zeroCounts(): Record<TeamChoice, number> {
   return Object.fromEntries(TEAM_CHOICES.map((id) => [id, 0])) as Record<TeamChoice, number>;
@@ -326,6 +329,7 @@ export function TeamVoteArena() {
   const noticeTimer = useRef<number | undefined>(undefined);
   const resultsPollTimer = useRef<number | undefined>(undefined);
   const resultsPollFailures = useRef(0);
+  const footerClickTimes = useRef<number[]>([]);
 
   const showNotice = useCallback((next: Notice) => {
     window.clearTimeout(noticeTimer.current);
@@ -717,6 +721,20 @@ export function TeamVoteArena() {
   const topLabel = `현재 1위${topTeams.length > 1 ? ` (${topTeams.length}팀 동률)` : ""}`;
   const rankedTeams = [...TEAMS].sort((a, b) => displayCounts[b.id] - displayCounts[a.id]);
   const campaignStatus = (results?.campaign ?? session?.campaign)?.status;
+
+  function handleFooterClick() {
+    const now = Date.now();
+    const recentClicks = footerClickTimes.current.filter(
+      (clickedAt) => now - clickedAt <= FOOTER_EASTER_EGG_WINDOW_MS,
+    );
+    recentClicks.push(now);
+    footerClickTimes.current = recentClicks;
+
+    if (recentClicks.length !== FOOTER_EASTER_EGG_CLICKS) return;
+
+    footerClickTimes.current = [];
+    window.open(FOOTER_EASTER_EGG_ROUTE, "_blank", "noopener,noreferrer");
+  }
 
   return (
     <div style={{ minHeight: "100vh", background: "#09090f", color: "#f5f5fa", fontFamily: "'Noto Sans KR',sans-serif" }}>
@@ -1161,6 +1179,7 @@ export function TeamVoteArena() {
 
       <footer style={{ borderTop: "1px solid rgba(255,255,255,0.08)", padding: "24px 0", textAlign: "center" }}>
         <p
+          onClick={handleFooterClick}
           style={{
             fontSize: 12,
             letterSpacing: "0.2em",
@@ -1168,6 +1187,7 @@ export function TeamVoteArena() {
             fontWeight: 700,
             margin: 0,
             color: "#f5f5fa",
+            cursor: "default",
           }}
         >
           ⚡ 오늘의 밸런스게임 · 투표는 계속됩니다 ⚡
